@@ -1,0 +1,12 @@
+---
+description: Flujo Git del proyecto (ramas y commits)
+alwaysApply: true
+---
+
+# Git
+
+- Remoto: `https://github.com/brayan-chiquito/menu-custom-service.git`
+- Rama de trabajo principal: `develop`.
+- `main` solo para releases estables / merges revisados.
+- Commits solo cuando el usuario lo pida.
+- No force-push a `main`/`master`. No alterar `git config`.

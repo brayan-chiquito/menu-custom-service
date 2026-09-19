@@ -1,0 +1,52 @@
+---
+description: Reglas unificadas del frontend (UI, TypeScript, tests, debug, refactor)
+globs: frontend/**/*
+alwaysApply: false
+---
+
+# Frontend
+
+- Stack: React + Vite + TypeScript, PWA instalable.
+- Mobile-first: botones ≥48px; un solo foco visual en Cobro.
+- Por feature: hook con lógica + componente de solo render.
+- HTTP solo vía `shared/api`. `VITE_API_BASE_URL` desde `.env`.
+- Pantallas: Armar pedido → Resumen → Cobro → Historial.
+- Diseño en Pencil (`prompts-ux.md`) antes de implementar.
+
+## Componentes y UX
+
+- Componentes pequeños, enfocados y reutilizables.
+- Separar UI de lógica de negocio.
+- Estado mínimo y local; evitar global innecesario.
+- Manejar loading, error y empty de forma explícita.
+- Accesibilidad básica (labels, roles, semántica).
+- Evitar re-renders innecesarios; memoizar solo con necesidad demostrada.
+- JSX limpio; evitar anidación profunda.
+
+## TypeScript
+
+- Evitar `any` y `unknown` sin validar.
+- Validar inputs externos en boundaries (Zod/Valibot u equivalente).
+- Preferir uniones discriminadas y tipos precisos.
+- Interfaces (repos/services) antes de implementar cuando aporte claridad.
+- DTOs distintos del dominio cuando sea útil.
+- Evitar `as` salvo cast seguro, mínimo y justificado.
+
+## Testing
+
+- Testear lógica compleja/crítica; no over-test trivial.
+- TDD cuando aporte: Red → Green → Refactor.
+- Probar lo que el usuario ve y hace (AAA); no detalles internos.
+- Nombre: `should [expected] when [condition]`.
+- Mocks solo para externos; preferir fakes in-memory.
+- Cada bugfix con test de reproducción cuando sea viable.
+
+## Debug
+
+- Identificar causa raíz antes de arreglar; no fixes especulativos.
+- Reproducir el issue; preferir cambios mínimos y focalizados.
+
+## Refactor
+
+- Mejorar legibilidad/estructura sin cambiar comportamiento.
+- Reducir duplicación; evitar abstracciones innecesarias.

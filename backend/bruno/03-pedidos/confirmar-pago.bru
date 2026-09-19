@@ -1,0 +1,23 @@
+meta {
+  name: Confirmar pago
+  type: http
+  seq: 2
+}
+
+patch {
+  url: {{baseUrl}}/pedidos/1/confirmar
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.estado: eq pagado
+}
+
+docs {
+  ## PATCH /pedidos/:id/confirmar
+  Respuesta incluye `notificacion: { enviada, mensaje }`.
+  Si `enviada` es false, el frontend muestra "Copiar pedido" con `mensaje`.
+  El pedido queda `pagado` en ambos casos.
+}

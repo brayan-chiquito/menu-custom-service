@@ -1,0 +1,20 @@
+meta {
+  name: Listar pedidos hoy
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/pedidos?fecha=hoy
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  Lista los pedidos del día (date(created_at) = date('now')).
+  Respuesta: array de resumenes sin items.
+}

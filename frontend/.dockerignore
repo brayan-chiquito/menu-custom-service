@@ -1,0 +1,9 @@
+node_modules
+dist
+.git
+*.md
+coverage
+.dev-dist
+.env
+.env.*
+!.env.example

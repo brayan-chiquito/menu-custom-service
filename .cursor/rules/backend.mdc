@@ -1,0 +1,50 @@
+---
+description: Reglas unificadas del backend (API, tests, debug, refactor)
+globs: backend/**/*
+alwaysApply: false
+---
+
+# Backend
+
+- Stack: Node.js + TypeScript + Express.
+- Capas: `controller → service → repository`.
+- Persistencia: SQLite. WhatsApp detrás de interfaz `Notificador`.
+- Precios congelados en el pedido (histórico).
+
+## API
+
+- Controllers/handlers delgados; lógica en services/dominio.
+- Separar lógica de negocio del transporte (HTTP, serialización).
+- Validar inputs en boundaries (DTOs/schemas). Nunca confiar en input externo.
+- Errores consistentes y con contexto; no filtrar detalles sensibles.
+- Llamadas externas defensivas (timeouts, retries cuando aplique).
+- Evitar N+1; paginar datasets grandes.
+- Loguear eventos útiles; no loguear datos sensibles.
+
+## Documentación API (README + Bruno)
+
+- Actualizar `backend/README.md` en cada tarea de API.
+- Por cada endpoint: `curl` copiable + apartado **"Debería responder"** (status + JSON ejemplo).
+- Mantener requests en `backend/bruno/` alineadas con esos ejemplos.
+- Este formato curl/respuesta es solo del backend.
+
+## Testing
+
+- Cada feature/endpoint de una tarea debe tener tests automatizados antes de pedir OK.
+- Preferir SQLite en memoria (`:memory:`) + tests de API (supertest) para el backend.
+- Testear lógica compleja, crítica o propensa a edge cases; no over-test trivial.
+- TDD cuando aporte: Red → Green → Refactor.
+- Probar comportamiento, no detalles de implementación (AAA).
+- Nombre: `should [expected] when [condition]`.
+- Mocks solo para externos (HTTP, DB, FS, time); preferir fakes in-memory.
+- Cada bug fix con test de reproducción cuando sea viable.
+
+## Debug
+
+- Identificar causa raíz antes de arreglar; no fixes especulativos.
+- Reproducir el issue; preferir cambios mínimos y focalizados.
+
+## Refactor
+
+- Mejorar legibilidad/estructura sin cambiar comportamiento.
+- Reducir duplicación; evitar abstracciones innecesarias.
