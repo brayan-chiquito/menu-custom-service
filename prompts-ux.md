@@ -27,7 +27,7 @@ Pantallas Pencil: `01`…`05` pedido/cobro/historial · **`06` Balance** (v1 sim
 - **Proteína** (solo si `requiere_proteina`): Carne | Pollo — si el
   producto no la requiere (ej. Apoteósico), **no mostrar** esta sección
 - **Toppings** (opcional): lista con precio; multi-selección
-- CTA “Agregar” deshabilitado hasta base + al menos una salsa (+ proteína si aplica)
+- CTA “Agregar” deshabilitado hasta base (+ proteína si aplica); salsas opcionales
 - Cancelar / cerrar
 
 ---

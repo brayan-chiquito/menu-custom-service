@@ -329,7 +329,7 @@ Tests: `tests/pedidos-pago.test.ts` (GET por id + pay later).
 
 ### Task 4 — POST /pedidos
 
-- base_id + salsa_ids (al menos una) obligatorios; proteina_id condicional.
+- base_id obligatorio en platos; salsa_ids opcional (0 o más); proteina_id condicional.
 - Tests: `tests/pedidos.test.ts`.
 
 

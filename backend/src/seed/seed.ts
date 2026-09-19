@@ -65,9 +65,9 @@ const PRODUCTOS: UpsertProducto[] = [
     requiere_proteina: false,
   },
   {
-    nombre: 'Limonada de coco',
+    nombre: 'Limonada de maracuyá',
     precio: 3000,
-    descripcion: 'Bebida fría de limón y coco',
+    descripcion: 'Bebida fría de limón y maracuyá',
     requiere_proteina: false,
     categoria: 'bebidas',
   },
@@ -107,7 +107,21 @@ export function seedMenu(db: AppDatabase): void {
     `,
   );
 
+  const renameLimonada = db.prepare(
+    `
+    UPDATE productos
+    SET nombre = 'Limonada de maracuyá',
+        descripcion = 'Bebida fría de limón y maracuyá',
+        precio = 3000,
+        categoria = 'bebidas',
+        disponible = 1,
+        requiere_proteina = 0
+    WHERE nombre = 'Limonada de coco'
+    `,
+  );
+
   const txn = db.transaction(() => {
+    renameLimonada.run();
     for (const nombre of BASES) {
       upsertBase.run(nombre);
     }

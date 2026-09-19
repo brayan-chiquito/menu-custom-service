@@ -36,7 +36,7 @@ describe('historial detalle formatting', () => {
   it('should format bebida without base', () => {
     const linea: PedidoDetalleLinea = {
       cantidad: 1,
-      producto_nombre: 'Limonada de coco',
+      producto_nombre: 'Limonada de maracuyá',
       base_nombre: null,
       salsa_nombres: [],
       proteina_nombre: null,

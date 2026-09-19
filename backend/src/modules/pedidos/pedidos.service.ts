@@ -104,17 +104,14 @@ export class PedidosService {
           throw new AppError('base_id es obligatorio', 400);
         }
 
-        if (!Array.isArray(item.salsa_ids) || item.salsa_ids.length === 0) {
-          throw new AppError('salsa_ids es obligatorio (al menos una salsa)', 400);
-        }
-
         const base = this.repository.findBaseById(item.base_id as number);
         if (!base) {
           throw new AppError(`Base ${item.base_id} no encontrada`, 404);
         }
         baseId = base.id;
 
-        salsaIdsUnicos = [...new Set(item.salsa_ids)];
+        const salsaIds = Array.isArray(item.salsa_ids) ? item.salsa_ids : [];
+        salsaIdsUnicos = [...new Set(salsaIds)];
         for (const salsaId of salsaIdsUnicos) {
           if (!Number.isInteger(salsaId)) {
             throw new AppError('salsa_id inválido', 400);

@@ -9,7 +9,7 @@ export function puedeAgregarProducto(input: {
   if (input.categoria === 'bebidas') {
     return true;
   }
-  if (input.baseId === null || input.salsaIds.length === 0) {
+  if (input.baseId === null) {
     return false;
   }
   if (input.requiere_proteina && input.proteinaId === null) {

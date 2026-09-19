@@ -85,13 +85,13 @@ export function AgregarProductoModal({
       return;
     }
 
-    if (baseId === null || salsaIds.length === 0) {
+    if (baseId === null) {
       return;
     }
     const base = bases.find((b) => b.id === baseId);
     const salsasSeleccionadas = salsas.filter((s) => salsaIds.includes(s.id));
     const proteina = proteinas.find((p) => p.id === proteinaId);
-    if (!base || salsasSeleccionadas.length === 0) {
+    if (!base) {
       return;
     }
 
@@ -118,7 +118,7 @@ export function AgregarProductoModal({
         ${producto.precio.toLocaleString('es-CO')}
         {esBebida
           ? ' · listo para agregar'
-          : ` · elige base y al menos una salsa${producto.requiere_proteina ? ' y proteína' : ''}`}
+          : ` · elige base${producto.requiere_proteina ? ', proteína' : ''} (salsas opcionales)`}
       </p>
 
       {!esBebida ? (
@@ -140,7 +140,7 @@ export function AgregarProductoModal({
           </section>
 
           <section className="selector-block">
-            <h3>Salsas (una o más)</h3>
+            <h3>Salsas (opcional)</h3>
             <div className="chip-row">
               {salsas.map((salsa) => (
                 <button

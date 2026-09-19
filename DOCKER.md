@@ -64,7 +64,7 @@ docker compose ps
 | Cambiar solo destino WhatsApp | edita `WHATSAPP_TARGET_NUMBER` en `.env` → `docker compose up -d` (sin rebuild) |
 
 Al reconstruir: la migración **v3→v4** hace `base_id` nullable **sin borrar pedidos**;
-el seed solo hace **upsert** del menú (ej. Limonada de coco). No borres
+el seed solo hace **upsert** del menú (ej. Limonada de maracuyá). No borres
 `backend/data/` salvo que quieras resetear prod a propósito.
 
 ## Volúmenes (no borrar)

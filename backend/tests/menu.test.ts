@@ -49,7 +49,7 @@ describe('GET /menu', () => {
     expect(candente.descripcion).toContain('Carne o Pollo');
     expect(apoteosico.descripcion).toContain('Carne y Pollo');
     const limonada = response.body.productos.find(
-      (p: { nombre: string }) => p.nombre === 'Limonada de coco',
+      (p: { nombre: string }) => p.nombre === 'Limonada de maracuyá',
     );
     expect(limonada).toMatchObject({
       precio: 3000,

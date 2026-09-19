@@ -130,10 +130,10 @@ describe('POST /pedidos', () => {
     expect(apoteosicoOk.body.items[0].proteina_id).toBeNull();
   });
 
-  it('should reject missing base or salsa', async () => {
+  it('should reject missing base; allow empty salsa_ids', async () => {
     const app = createApp(db, new FakeNotificador());
 
-    const response = await request(app)
+    const sinBase = await request(app)
       .post('/pedidos')
       .send({
         items: [
@@ -145,8 +145,23 @@ describe('POST /pedidos', () => {
           },
         ],
       });
+    expect(sinBase.status).toBe(400);
 
-    expect(response.status).toBe(400);
+    const sinSalsa = await request(app)
+      .post('/pedidos')
+      .send({
+        items: [
+          {
+            producto_id: ids.apoteosico,
+            cantidad: 1,
+            base_id: ids.base,
+            salsa_ids: [],
+            adiciones: [],
+          },
+        ],
+      });
+    expect(sinSalsa.status).toBe(201);
+    expect(sinSalsa.body.items[0].salsa_ids).toEqual([]);
   });
 
   it('should accept multiple salsa_ids on one item', async () => {
@@ -177,7 +192,7 @@ describe('POST /pedidos', () => {
   it('should create bebida without base or salsa', async () => {
     const app = createApp(db, new FakeNotificador());
     const limonada = (
-      db.prepare(`SELECT id FROM productos WHERE nombre = 'Limonada de coco'`).get() as {
+      db.prepare(`SELECT id FROM productos WHERE nombre = 'Limonada de maracuyá'`).get() as {
         id: number;
       }
     ).id;

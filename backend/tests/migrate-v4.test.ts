@@ -105,7 +105,7 @@ describe('migrate v3 → v4 (nullable base_id)', () => {
       upgraded.prepare(`SELECT COUNT(*) AS n FROM pedido_items`).get() as { n: number }
     ).n;
     const limonada = upgraded
-      .prepare(`SELECT precio, categoria FROM productos WHERE nombre = 'Limonada de coco'`)
+      .prepare(`SELECT precio, categoria FROM productos WHERE nombre = 'Limonada de maracuyá'`)
       .get() as { precio: number; categoria: string };
     const baseCol = (
       upgraded.prepare(`PRAGMA table_info(pedido_items)`).all() as Array<{

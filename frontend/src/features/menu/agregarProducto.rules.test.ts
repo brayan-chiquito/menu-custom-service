@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { puedeAgregarProducto } from './agregarProducto.rules';
 
 describe('agregar producto rules', () => {
-  it('should require base and at least one salsa for platos', () => {
+  it('should require base for platos; salsas optional', () => {
     expect(
       puedeAgregarProducto({
         categoria: 'platos',
@@ -21,7 +21,7 @@ describe('agregar producto rules', () => {
         proteinaId: 1,
         requiere_proteina: true,
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('should allow multiple salsas', () => {
