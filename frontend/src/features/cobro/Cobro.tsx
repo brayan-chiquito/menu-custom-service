@@ -16,7 +16,6 @@ export function Cobro() {
     copiarPedido,
     nuevoPedido,
     vacio,
-    modoPendiente,
     contexto,
     backTo,
     backLabel,
