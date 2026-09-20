@@ -24,51 +24,57 @@ Estructura final esperada:
 ```
 pedidos-app/
   backend/
-    CONTEXT.md
+    README.md
     src/
     package.json
     Dockerfile
   frontend/
-    CONTEXT.md
+    README.md
     src/
     package.json
     Dockerfile
-  prompts-ux.md
-  prompts-cursor.md
+  pencilux/
   docker-compose.yml
+  DOCKER.md
   .env
   .gitignore
   README.md
+  requerimientos-monorepo.md
 ```
 
 ## 2. Alcance
 Sistema local de gestión de pedidos de menú: armado de pedido con
-cantidades y adiciones, cálculo de total, cobro con vuelto, y aviso
-por WhatsApp al confirmar el pago. Un solo operador (celular),
+cantidades y adiciones, cálculo de total, cobro con vuelto (inmediato
+o diferido), historial del día con detalle, balance de ventas simple,
+y aviso por WhatsApp al confirmar el pago. Un solo operador (celular),
 acceso remoto vía Tailscale, sin nube, sin dominio.
 
 ## 3. Requerimientos funcionales
-(idénticos a los ya definidos — se mantienen como fuente de verdad)
+(fuente de verdad del producto)
 
-- RF-01 Gestión de menú (productos y adiciones, CRUD básico)
+- RF-01 Gestión de menú (productos y adiciones; menú vía seed)
 - RF-02 Armado de pedido con cálculo de total en tiempo real
 - RF-03 Nombre de cliente opcional → `"Sin nombre"` por defecto
 - RF-04 Cobro con validación de monto y cálculo de vuelto
 - RF-05 Confirmación explícita de pago (cambia estado a `pagado`)
 - RF-06 Notificación automática por WhatsApp al confirmar el pago,
-  sin bloquear el flujo si falla
-- RF-07 Historial de pedidos del día
-- RF-08 Cada unidad de producto en el pedido requiere elegir una base
-  (Maduro/Verde) y una o más salsas (Ajo/Agridulce/Ranchera/BBQ), sin
-  costo adicional; los toppings siguen siendo opcionales y con costo
-- RF-09 El menú real (Platanópolis) se carga mediante un script de
-  seed, no manualmente por el usuario, y ese mismo script debe
-  permitir corregir datos del menú sin duplicar registros
-- RF-10 Solo los productos marcados como `requiere_proteina` (ej.
-  Candente, Chicharronero: “Carne o Pollo”) exigen elegir entre Carne
-  y Pollo al armar el ítem. Los que ya traen ambas (ej. Apoteósico:
-  “Carne y Pollo”) o una fija/ninguna no ofrecen ni exigen esa
-  selección (`requiere_proteina = false`, `proteina_id` null)
+  sin bloquear el flujo si falla (mensaje listo para copiar si falla)
+- RF-07 Historial de pedidos del día (filtros Todos/Pendientes/Pagados)
+- RF-08 En platos, cada ítem requiere **base** (Maduro/Verde). Las
+  **salsas** (Ajo/Agridulce/Ranchera/BBQ) son **opcionales** (0 o más),
+  sin costo. Toppings opcionales con costo. Las **bebidas**
+  (`categoria = bebidas`, ej. Limonada de maracuyá) no usan base ni
+  salsa ni proteína
+- RF-09 El menú real (Platanópolis) se carga mediante seed (upsert por
+  `nombre`, sin duplicar; permite corregir datos)
+- RF-10 Solo productos con `requiere_proteina` exigen Carne o Pollo;
+  el resto no muestra ni exige proteína
+- RF-11 Pedido pendiente: se puede **guardar sin pagar** y cobrar
+  después desde Historial (`/cobro/:id`)
+- RF-12 Detalle de pedido en Historial (ítems, extras, monto/vuelto si
+  pagado) vía `GET /pedidos/:id`
+- RF-13 Balance de ventas simple: cobrado / pedidos / ticket / pendiente
+  por periodo Hoy | Semana (lunes→hoy) | Mes
 
 ## 4. Requerimientos no funcionales
 - RNF-01 Persistencia en disco (SQLite), sin pérdida de pedidos ante
@@ -79,30 +85,33 @@ acceso remoto vía Tailscale, sin nube, sin dominio.
   cambios posteriores en el catálogo
 - RNF-05 Todo el stack ejecutable con `docker compose up` en un único
   comando
+- RNF-06 Migraciones de esquema no deben borrar pedidos de producción
+  (ej. v3→v4: `base_id` nullable sin DROP de datos)
 
-## 5. Backend (resumen ejecutable — detalle completo en `backend/CONTEXT.md`)
+## 5. Backend (resumen — detalle operativo en `backend/README.md`)
 - Node.js + TypeScript + Express, capas `controller → service → repository`
-- SQLite vía `better-sqlite3` o Prisma
+- SQLite vía `better-sqlite3`
 - `whatsapp-web.js` con sesión persistida en volumen
-- Notificaciones detrás de interfaz `Notificador` (SOLID: O y D)
-- Tablas `bases`, `salsas` y `proteinas` como catálogos de referencia
-  (`proteinas` solo obligatoria si `producto.requiere_proteina` es
-  `true`, ej. Candente y Chicharronero); `adiciones` para los
-  toppings (opcionales, con costo)
-- Endpoints: `GET /menu` (productos + bases + salsas + proteinas +
-  toppings), `POST /pedidos`, `PATCH /pedidos/:id/pago`,
-  `PATCH /pedidos/:id/confirmar`, `GET /pedidos?fecha=hoy`
-- Script `seed/seed.ts` para cargar y corregir los datos reales del
-  menú (upsert por `nombre`, sin duplicar filas)
+- Notificaciones detrás de interfaz `Notificador` (Fake o WhatsApp)
+- Catálogos: `bases`, `salsas`, `proteinas`, `adiciones`; productos con
+  `categoria` (`platos` | `bebidas`) y `requiere_proteina`
+- Endpoints:
+  - `GET /menu`
+  - `POST /pedidos` (platos: base obligatoria, salsas opcionales;
+    bebidas: sin base/salsa)
+  - `GET /pedidos?fecha=hoy`
+  - `GET /pedidos/:id` (detalle con `lineas`)
+  - `GET /pedidos/balance?periodo=hoy|semana|mes`
+  - `PATCH /pedidos/:id/pago`
+  - `PATCH /pedidos/:id/confirmar`
+- Script `seed/seed.ts` (upsert + rename legacy si aplica)
 
-## 6. Frontend (resumen ejecutable — detalle completo en `frontend/CONTEXT.md`)
-- Diseño de pantallas primero en **Pencil**, usando `prompts-ux.md`
-  como guion de cada pantalla; la implementación en código parte de
-  ese diseño, no al revés
+## 6. Frontend (resumen — detalle operativo en `frontend/README.md`)
 - React + Vite + TypeScript, PWA instalable
 - Por feature: hook con lógica + componente de solo render
 - Capa `shared/api` única para llamadas HTTP
-- Pantallas: Armar pedido, Resumen, Cobro, Historial
+- Pantallas: Armar pedido, Resumen, Cobro (inmediato y diferido),
+  Historial (Detalles + Cobrar + Balance), Balance
 - `VITE_API_BASE_URL` configurable por `.env` (IP de Tailscale + puerto)
 
 ## 7. Docker Compose (raíz del monorepo)
@@ -162,21 +171,14 @@ cuenta, y abrir `http://<IP-tailscale-PC>:5173` desde el navegador →
 3. Backend: script de seed con los datos reales de Platanópolis
    (flags de proteína incluidos; permite corregir el menú sin
    duplicar registros)
-4. Backend: endpoint de creación de pedido con base, una o más salsas,
-   proteína condicional y cálculo de total
+4. Backend: endpoint de creación de pedido (base obligatoria en platos,
+   salsas opcionales, proteína condicional, bebidas sin customización)
 5. Backend: endpoint de pago/vuelto + confirmación
 6. Backend: integración WhatsApp (dejar esto de último si el tiempo
    aprieta — RF-06 puede diferirse un rato sin bloquear el uso real)
-7. **Diseño UX en Pencil**: usar `prompts-ux.md` para maquetar las 4
-   pantallas (Armar pedido, Resumen, Cobro, Historial) antes de tocar
-   código de frontend. Esto se puede hacer en paralelo a los pasos
-   2-6 (backend), pero debe estar listo antes del paso 8.
-8. Frontend: pantalla Armar pedido conectada a `/menu`, construida a
-   partir del diseño de Pencil del paso 7
-9. Frontend: Resumen + Cobro conectados a los endpoints de pedido,
-   igualmente a partir de los diseños de Pencil
-10. Frontend: Historial del día
-11. Tailscale + prueba real desde el celular fuera de la red del PC
+7. Frontend: Armar pedido + Resumen + Cobro (inmediato)
+8. Frontend: Historial, pedidos pendientes, Detalles, Balance
+9. Tailscale + prueba real desde el celular fuera de la red del PC
 
 ## 10. Criterios de éxito
 - `docker compose up` levanta todo con un solo comando, sin pasos

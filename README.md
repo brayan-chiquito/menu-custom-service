@@ -7,14 +7,18 @@ Un operador (celular), acceso por **Tailscale**, sin nube ni dominio público.
 
 | ID | Estado |
 |----|--------|
-| RF-01 … RF-10 | Cubiertos (menú/seed, armado, nombre, cobro, confirmar, WhatsApp, historial, base + varias salsas, proteína condicional) |
+| RF-01 … RF-10 | Cubiertos (menú/seed, armado, nombre, cobro, confirmar, WhatsApp, historial, base + salsas opcionales, proteína condicional, bebidas) |
+| RF-11 Pedido pendiente / cobrar después | Cubierto |
+| RF-12 Detalle en historial | Cubierto |
+| RF-13 Balance Hoy/Semana/Mes | Cubierto |
 | RNF-01 Persistencia SQLite | Cubierto (volumen `backend/data`) |
 | RNF-02 Solo Tailscale | Cubierto operativamente (guía abajo; la app no se publica a internet) |
 | RNF-03 Mobile-first | Cubierto |
 | RNF-04 Precios congelados | Cubierto |
 | RNF-05 `docker compose up` | Cubierto (seed al arrancar el contenedor backend) |
+| RNF-06 Migraciones sin borrar pedidos | Cubierto (v3→v4 nullable `base_id`) |
 
-Criterio de éxito pendiente de **probar en campo**: pedido completo desde el celular con datos móviles (paso 11 de los requisitos).
+Criterio de éxito pendiente de **probar en campo**: pedido completo desde el celular con datos móviles.
 
 ## Documentación
 
@@ -24,7 +28,6 @@ Criterio de éxito pendiente de **probar en campo**: pedido completo desde el ce
 | Docker | [DOCKER.md](DOCKER.md) |
 | Backend / Bruno | [backend/README.md](backend/README.md) |
 | Frontend | [frontend/README.md](frontend/README.md) |
-| Reglas de negocio | [backend/CONTEXT.md](backend/CONTEXT.md), [frontend/CONTEXT.md](frontend/CONTEXT.md) |
 | Requisitos | [requerimientos-monorepo.md](requerimientos-monorepo.md) |
 
 ---

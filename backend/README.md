@@ -105,6 +105,7 @@ curl http://localhost:3000/menu
 ```
 
 Candente/Chicharronero → elegir Carne **o** Pollo. Apoteósico ya trae ambas → sin selector.
+Limonada de maracuyá (`categoria: bebidas`, `$3000`) → sin base/salsa/proteína.
 
 ### POST /pedidos (con proteína)
 
@@ -322,14 +323,16 @@ Tests: `tests/pedidos-pago.test.ts` (GET por id + pay later).
 
 ### Task 3 — Seed Platanópolis
 
-- `npm run seed` → `src/seed/seed.ts` upsert por nombre.
-- Tests: `tests/seed.test.ts`.
+- `npm run seed` → `src/seed/seed.ts` upsert por nombre (incluye bebidas
+  como Limonada de maracuyá; rename legacy coco → maracuyá).
+- Tests: `tests/seed.test.ts`, `tests/menu.test.ts`.
 
 
 
 ### Task 4 — POST /pedidos
 
-- base_id obligatorio en platos; salsa_ids opcional (0 o más); proteina_id condicional.
+- Platos: `base_id` obligatorio; `salsa_ids` opcional (0 o más); `proteina_id` condicional.
+- Bebidas (`categoria=bebidas`): sin base ni salsas.
 - Tests: `tests/pedidos.test.ts`.
 
 
@@ -344,7 +347,7 @@ Tests: `tests/pedidos-pago.test.ts` (GET por id + pay later).
 ### Task 6 — WhatsApp
 
 - `WhatsappNotificador` con sesión en `.wwebjs_auth` / volumen Docker.
-- Mensaje con cliente, productos, base, salsa, proteína, adiciones y total.
+- Mensaje con cliente, productos, base/salsa/proteína/adiciones si aplican, y total.
 - Fallos solo se loggean.
 
 ### Historial — GET /pedidos?fecha=hoy
@@ -352,4 +355,9 @@ Tests: `tests/pedidos-pago.test.ts` (GET por id + pay later).
 - Lista pedidos del día (resumen sin items).
 - Tests: `tests/historial.test.ts`.
 - Bruno: `bruno/03-pedidos/listar-pedidos-hoy.bru`.
+
+### Detalle / cobro diferido / balance
+
+- `GET /pedidos/:id`, cobro diferido y `GET /pedidos/balance` — ver secciones curl arriba.
+- Migración v3→v4: `base_id` nullable **sin** borrar pedidos (`tests/migrate-v4.test.ts`).
 
