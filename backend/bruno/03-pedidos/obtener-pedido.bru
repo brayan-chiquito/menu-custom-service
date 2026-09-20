@@ -1,0 +1,20 @@
+meta {
+  name: Obtener pedido por id
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/pedidos/1
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  Detalle legible del pedido (`lineas` con nombres y subtotales).
+  Usado por Historial → Detalles y por cobro diferido.
+}

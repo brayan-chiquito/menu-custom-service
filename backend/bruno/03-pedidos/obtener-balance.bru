@@ -1,0 +1,21 @@
+meta {
+  name: Obtener balance
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/pedidos/balance?periodo=hoy
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  Agregados de ventas: periodo=hoy|semana|mes.
+  Semana = lunes→hoy (UTC). Mes = día 1→hoy.
+  cobrado solo cuenta pedidos pagados; pendiente aparte.
+}

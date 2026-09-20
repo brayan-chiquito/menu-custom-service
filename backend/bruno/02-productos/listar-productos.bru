@@ -1,0 +1,21 @@
+meta {
+  name: Obtener menu
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/menu
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  ## GET /menu
+  Devuelve productos, bases, salsas, proteinas y toppings globales.
+  Usa `requiere_proteina` para saber si el ítem exige Carne/Pollo.
+}

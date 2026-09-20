@@ -1,0 +1,30 @@
+meta {
+  name: Registrar pago
+  type: http
+  seq: 1
+}
+
+patch {
+  url: {{baseUrl}}/pedidos/1/pago
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "monto_pagado": 30000
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.estado: eq pendiente
+}
+
+docs {
+  Paga al menos el total del pedido creado (Candente+guacamole = 24000 → aquí 30000).
+}

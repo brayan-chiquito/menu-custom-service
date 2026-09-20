@@ -1,0 +1,30 @@
+meta {
+  name: Registrar pago insuficiente
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{baseUrl}}/pedidos/1/pago
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "monto_pagado": 20000
+  }
+}
+
+assert {
+  res.status: eq 400
+}
+
+docs {
+  Con total 36000 y monto 20000 → faltante 16000.
+  Este request es el caso de error a propósito.
+}

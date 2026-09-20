@@ -1,0 +1,25 @@
+node_modules/
+dist/
+build/
+*.db
+.env
+.env.qa
+**/.env.qa
+.wwebjs_auth/
+.wwebjs_auth_qa/
+.wwebjs_cache/
+**/.wwebjs_auth/
+**/.wwebjs_auth_qa/
+**/.wwebjs_cache/
+backend/data/
+backend/wwebjs-session/
+backups/
+*.log
+.DS_Store
+
+# IDE / trabajo local (no producto)
+.cursor/
+backend/CONTEXT.md
+frontend/CONTEXT.md
+prompts-ux.md
+task/
