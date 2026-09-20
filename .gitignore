@@ -16,3 +16,10 @@ backend/wwebjs-session/
 backups/
 *.log
 .DS_Store
+
+# IDE / trabajo local (no producto)
+.cursor/
+backend/CONTEXT.md
+frontend/CONTEXT.md
+prompts-ux.md
+task/
