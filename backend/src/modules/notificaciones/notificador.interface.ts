@@ -14,6 +14,7 @@ export type PedidoDTO = {
   monto_pagado: number | null;
   vuelto: number | null;
   estado: string;
+  indicaciones?: string | null;
   items: PedidoItemNotificacion[];
 };
 
@@ -53,6 +54,9 @@ export function formatearMensajePedido(pedido: PedidoDTO): string {
   return [
     `Pedido #${pedido.id}`,
     `Cliente: ${pedido.nombre_cliente}`,
+    ...(pedido.indicaciones && pedido.indicaciones.trim() !== ''
+      ? [`Indicaciones: ${pedido.indicaciones.trim()}`]
+      : []),
     'Detalle:',
     ...lineas,
     `Total: $${pedido.total}`,

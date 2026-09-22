@@ -1,38 +1,41 @@
 import type { PeriodoBalance } from './pedidos.types.js';
+import { formatFechaBogota, getBogotaParts } from '../../shared/time.js';
 
 function pad2(n: number): string {
   return String(n).padStart(2, '0');
 }
 
-/** Fecha YYYY-MM-DD en UTC (alineado con SQLite date('now')). */
+/** @deprecated usar formatFechaBogota — se mantiene alias para imports viejos en tests. */
 export function formatFechaUtc(date: Date): string {
-  return `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-${pad2(date.getUTCDate())}`;
+  return formatFechaBogota(date);
 }
 
 /**
- * Resuelve el rango inclusivo del periodo.
- * Semana = lunes → hoy (UTC). Mes = día 1 → hoy (UTC).
+ * Resuelve el rango inclusivo del periodo en America/Bogota.
+ * Semana = lunes → hoy. Mes = día 1 → hoy.
  */
 export function resolverRangoPeriodo(
   periodo: PeriodoBalance,
   ahora: Date = new Date(),
 ): { desde: string; hasta: string } {
-  const hasta = formatFechaUtc(ahora);
+  const hasta = formatFechaBogota(ahora);
+  const parts = getBogotaParts(ahora);
 
   if (periodo === 'hoy') {
     return { desde: hasta, hasta };
   }
 
   if (periodo === 'mes') {
-    const desde = `${ahora.getUTCFullYear()}-${pad2(ahora.getUTCMonth() + 1)}-01`;
+    const desde = `${parts.year}-${pad2(parts.month)}-01`;
     return { desde, hasta };
   }
 
-  const day = ahora.getUTCDay();
-  const daysFromMonday = day === 0 ? 6 : day - 1;
-  const monday = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth(), ahora.getUTCDate()));
+  const daysFromMonday = parts.weekday === 0 ? 6 : parts.weekday - 1;
+  const mondayUtc = Date.UTC(parts.year, parts.month - 1, parts.day);
+  const monday = new Date(mondayUtc);
   monday.setUTCDate(monday.getUTCDate() - daysFromMonday);
-  return { desde: formatFechaUtc(monday), hasta };
+  const desde = `${monday.getUTCFullYear()}-${pad2(monday.getUTCMonth() + 1)}-${pad2(monday.getUTCDate())}`;
+  return { desde, hasta };
 }
 
 export function calcularTicketPromedio(cobrado: number, pedidosPagados: number): number {

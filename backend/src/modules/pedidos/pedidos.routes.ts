@@ -20,6 +20,10 @@ export function createPedidosRouter(controller: PedidosController): Router {
     }
   });
 
+  router.get('/balance/export', (req, res, next) => {
+    void controller.exportarBalance(req, res).catch(next);
+  });
+
   router.get('/:id', (req, res, next) => {
     try {
       controller.obtener(req, res);
@@ -46,6 +50,30 @@ export function createPedidosRouter(controller: PedidosController): Router {
 
   router.patch('/:id/confirmar', (req, res, next) => {
     void controller.confirmar(req, res).catch(next);
+  });
+
+  router.patch('/:id/restaurar', (req, res, next) => {
+    try {
+      controller.restaurar(req, res);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch('/:id', (req, res, next) => {
+    try {
+      controller.actualizar(req, res);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.delete('/:id', (req, res, next) => {
+    try {
+      controller.eliminar(req, res);
+    } catch (error) {
+      next(error);
+    }
   });
 
   return router;

@@ -6,6 +6,10 @@ import {
   fetchPedidoById,
   registrarPago,
 } from '../../shared/api/pedidosApi';
+import {
+  mensajeErrorUsuario,
+  type ErrorAlertContent,
+} from '../../shared/errors/mensajeErrorUsuario';
 import { usePedidoStore } from '../pedido-actual/pedidoStore';
 
 type CobroPhase =
@@ -16,7 +20,7 @@ type CobroPhase =
       status: 'done';
       notificacion: { enviada: boolean; mensaje: string };
     }
-  | { status: 'error'; message: string };
+  | { status: 'error'; alert: ErrorAlertContent };
 
 type PedidoPendienteInfo = {
   id: number;
@@ -33,11 +37,14 @@ export function useCobro() {
 
   const items = usePedidoStore((s) => s.items);
   const nombreCliente = usePedidoStore((s) => s.nombreCliente);
+  const indicacionesActivas = usePedidoStore((s) => s.indicacionesActivas);
+  const indicaciones = usePedidoStore((s) => s.indicaciones);
   const cartTotal = usePedidoStore((s) => s.total());
   const clear = usePedidoStore((s) => s.clear);
 
   const [pendiente, setPendiente] = useState<PedidoPendienteInfo | null>(null);
   const [montoRecibido, setMontoRecibido] = useState('');
+  const [esTransferencia, setEsTransferencia] = useState(false);
   const [phase, setPhase] = useState<CobroPhase>(
     pedidoIdFromRoute ? { status: 'loading' } : { status: 'idle' },
   );
@@ -59,7 +66,10 @@ export function useCobro() {
         if (pedido.estado !== 'pendiente') {
           setPhase({
             status: 'error',
-            message: 'Este pedido ya no está pendiente de cobro',
+            alert: {
+              title: 'No se pudo cargar el pedido',
+              message: 'Este pedido ya no está pendiente de cobro',
+            },
           });
           return;
         }
@@ -75,7 +85,7 @@ export function useCobro() {
         if (!cancelled) {
           setPhase({
             status: 'error',
-            message: error instanceof Error ? error.message : 'No se pudo cargar el pedido',
+            alert: mensajeErrorUsuario(error, 'No se pudo cargar el pedido'),
           });
         }
       });
@@ -89,7 +99,7 @@ export function useCobro() {
   const total = modoPendiente ? (pendiente?.total ?? 0) : cartTotal;
   const contextoNombre = modoPendiente ? (pendiente?.nombre_cliente ?? '') : nombreCliente;
 
-  const monto = Number(montoRecibido.replace(/\D/g, '')) || 0;
+  const monto = esTransferencia ? total : Number(montoRecibido.replace(/\D/g, '')) || 0;
   const vuelto = monto - total;
   const puedeConfirmar =
     monto >= total &&
@@ -99,6 +109,9 @@ export function useCobro() {
     (!modoPendiente || pendiente !== null);
 
   const resumenVuelto = useMemo(() => {
+    if (esTransferencia) {
+      return '$0';
+    }
     if (!montoRecibido) {
       return 'Ingresa el monto recibido';
     }
@@ -106,7 +119,23 @@ export function useCobro() {
       return `Faltan $${(total - monto).toLocaleString('es-CO')}`;
     }
     return `$${vuelto.toLocaleString('es-CO')}`;
-  }, [monto, montoRecibido, total, vuelto]);
+  }, [esTransferencia, monto, montoRecibido, total, vuelto]);
+
+  function setTransferencia(checked: boolean) {
+    setEsTransferencia(checked);
+    if (checked && total > 0) {
+      setMontoRecibido(String(total));
+    } else {
+      setMontoRecibido('');
+    }
+  }
+
+  // Si carga el pendiente o cambia el total con transferencia ya marcada, sincroniza monto.
+  useEffect(() => {
+    if (esTransferencia && total > 0) {
+      setMontoRecibido(String(total));
+    }
+  }, [esTransferencia, total]);
 
   async function confirmarPago() {
     if (!puedeConfirmar) {
@@ -121,6 +150,8 @@ export function useCobro() {
       } else {
         const creado = await crearPedido({
           nombre_cliente: nombreCliente.trim() === '' ? null : nombreCliente.trim(),
+          indicaciones:
+            indicacionesActivas && indicaciones.trim() !== '' ? indicaciones.trim() : null,
           items: items.map((item) => ({
             producto_id: item.producto_id,
             cantidad: item.cantidad,
@@ -133,7 +164,7 @@ export function useCobro() {
         id = creado.id;
       }
 
-      await registrarPago(id, monto);
+      await registrarPago(id, monto, esTransferencia);
       const confirmado = await confirmarPedido(id);
 
       setPhase({
@@ -144,8 +175,14 @@ export function useCobro() {
     } catch (error: unknown) {
       setPhase({
         status: 'error',
-        message: error instanceof Error ? error.message : 'No se pudo confirmar el pago',
+        alert: mensajeErrorUsuario(error, 'No se pudo confirmar el pago'),
       });
+    }
+  }
+
+  function clearErrorAlert() {
+    if (phase.status === 'error') {
+      setPhase({ status: 'idle' });
     }
   }
 
@@ -169,6 +206,8 @@ export function useCobro() {
     total,
     montoRecibido,
     setMontoRecibido,
+    esTransferencia,
+    setTransferencia,
     resumenVuelto,
     puedeConfirmar,
     phase,
@@ -176,6 +215,7 @@ export function useCobro() {
     confirmarPago,
     copiarPedido,
     nuevoPedido,
+    clearErrorAlert,
     vacio,
     modoPendiente,
     contexto:

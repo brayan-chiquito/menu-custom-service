@@ -54,6 +54,22 @@ export function formatearRangoBalance(balance: Pick<BalanceVentas, 'periodo' | '
   return `${fmtDia(balance.desde)} – ${fmtDia(balance.hasta)}`;
 }
 
-export function esBalanceVacio(balance: Pick<BalanceVentas, 'pedidos_pagados' | 'pedidos_pendientes'>): boolean {
-  return balance.pedidos_pagados === 0 && balance.pedidos_pendientes === 0;
+export function esBalanceVacio(
+  balance: Pick<BalanceVentas, 'pedidos_pagados' | 'pedidos_pendientes' | 'gastos'>,
+): boolean {
+  return balance.pedidos_pagados === 0 && balance.pedidos_pendientes === 0 && balance.gastos === 0;
+}
+
+/** Nombre sugerido al guardar el .xlsx (misma regla que el backend). */
+export function nombreArchivoBalanceExport(
+  balance: Pick<BalanceVentas, 'periodo' | 'desde' | 'hasta'>,
+): string {
+  const { periodo, desde, hasta } = balance;
+  if (periodo === 'hoy') {
+    return `balance-platanopolis-hoy-${desde}.xlsx`;
+  }
+  if (periodo === 'semana') {
+    return `balance-platanopolis-semana-${desde}_al_${hasta}.xlsx`;
+  }
+  return `balance-platanopolis-mes-${desde.slice(0, 7)}.xlsx`;
 }

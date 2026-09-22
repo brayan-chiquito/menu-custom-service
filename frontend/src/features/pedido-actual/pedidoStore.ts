@@ -17,9 +17,13 @@ type AddItemInput = {
 type PedidoState = {
   items: CartItem[];
   nombreCliente: string;
+  indicacionesActivas: boolean;
+  indicaciones: string;
   addItem: (input: AddItemInput) => void;
   setCantidad: (key: string, cantidad: number) => void;
   setNombreCliente: (nombre: string) => void;
+  setIndicacionesActivas: (on: boolean) => void;
+  setIndicaciones: (texto: string) => void;
   clear: () => void;
   total: () => number;
   cantidadItems: () => number;
@@ -33,6 +37,8 @@ function lineTotal(item: CartItem): number {
 export const usePedidoStore = create<PedidoState>((set, get) => ({
   items: [],
   nombreCliente: '',
+  indicacionesActivas: false,
+  indicaciones: '',
 
   addItem(input) {
     const salsaKey = [...input.salsa_ids].sort((a, b) => a - b).join('-');
@@ -83,8 +89,19 @@ export const usePedidoStore = create<PedidoState>((set, get) => ({
     set({ nombreCliente: nombre });
   },
 
+  setIndicacionesActivas(on) {
+    set((state) => ({
+      indicacionesActivas: on,
+      indicaciones: on ? state.indicaciones : '',
+    }));
+  },
+
+  setIndicaciones(texto) {
+    set({ indicaciones: texto });
+  },
+
   clear() {
-    set({ items: [], nombreCliente: '' });
+    set({ items: [], nombreCliente: '', indicacionesActivas: false, indicaciones: '' });
   },
 
   total() {

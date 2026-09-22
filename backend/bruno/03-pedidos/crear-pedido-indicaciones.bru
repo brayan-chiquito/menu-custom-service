@@ -1,0 +1,40 @@
+meta {
+  name: Crear pedido con indicaciones
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/pedidos
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "nombre_cliente": "Mauricio",
+    "indicaciones": "Sin chicharrón · +maíz",
+    "items": [
+      {
+        "producto_id": 1,
+        "cantidad": 1,
+        "base_id": 1,
+        "salsa_ids": [1],
+        "adiciones": []
+      }
+    ]
+  }
+}
+
+assert {
+  res.status: eq 201
+}
+
+docs {
+  ## POST /pedidos (indicaciones)
+  Campo opcional `indicaciones`. Vacío/null → no se guarda ni sale en WhatsApp.
+}

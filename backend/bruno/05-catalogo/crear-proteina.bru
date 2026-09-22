@@ -1,0 +1,26 @@
+meta {
+  name: Crear proteina
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/catalogo/proteinas
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "nombre": "Cerdo Bruno"
+  }
+}
+
+assert {
+  res.status: eq 201
+}
+
+docs {
+  ## POST /catalogo/proteinas
+  Alta de proteína del catálogo.
+}

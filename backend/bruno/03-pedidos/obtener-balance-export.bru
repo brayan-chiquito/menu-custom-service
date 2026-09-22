@@ -1,0 +1,17 @@
+meta {
+  name: Exportar balance Excel
+  type: http
+  seq: 15
+}
+
+get {
+  url: {{baseUrl}}/pedidos/balance/export?periodo=hoy
+  body: none
+  auth: none
+}
+
+docs {
+  ## GET /pedidos/balance/export?periodo=hoy|semana|mes
+  Descarga .xlsx (Resumen / Pedidos / Egresos) con AutoFilter.
+  Content-Type: spreadsheetml.sheet
+}

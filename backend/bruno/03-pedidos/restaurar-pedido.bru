@@ -1,0 +1,17 @@
+meta {
+  name: Restaurar pedido
+  type: http
+  seq: 14
+}
+
+patch {
+  url: {{baseUrl}}/pedidos/1/restaurar
+  body: none
+  auth: none
+}
+
+docs {
+  ## PATCH /pedidos/:id/restaurar
+  Limpia `eliminado_at`. Vuelve a historial/balance. 200 con detalle.
+  404 si no existe o no está eliminado.
+}

@@ -1,21 +1,42 @@
 import { Link, useNavigate } from 'react-router-dom';
+import { AlertError } from '../../shared/components/AlertError';
 import { Button } from '../../shared/components/Button';
 import { AgregarProductoModal } from './AgregarProductoModal';
 import { useMenu } from './useMenu';
 
 export function MenuList() {
   const navigate = useNavigate();
-  const { state, selected, openProducto, closeProducto, addItem, cantidadItems, total } =
-    useMenu();
+  const {
+    state,
+    selected,
+    openProducto,
+    closeProducto,
+    addItem,
+    cantidadItems,
+    total,
+    reintentar,
+  } = useMenu();
 
   if (state.status === 'loading') {
-    return <main className="page"><p>Cargando menú…</p></main>;
+    return (
+      <main className="page">
+        <p>Cargando menú…</p>
+      </main>
+    );
   }
 
   if (state.status === 'error') {
     return (
       <main className="page">
-        <p className="error">{state.message}</p>
+        <header className="page-header">
+          <h1>Platanópolis</h1>
+        </header>
+        <AlertError
+          title={state.title}
+          message={state.message}
+          onClose={() => reintentar()}
+        />
+        <Button onClick={() => reintentar()}>Reintentar</Button>
       </main>
     );
   }
@@ -26,9 +47,14 @@ export function MenuList() {
     <main className="page">
       <header className="page-header">
         <h1>Platanópolis</h1>
-        <Link to="/historial" className="link-action">
-          Historial
-        </Link>
+        <nav className="header-nav">
+          <Link to="/ajustes" className="btn-gear" aria-label="Ajustes">
+            ⚙
+          </Link>
+          <Link to="/historial" className="link-action">
+            Historial
+          </Link>
+        </nav>
       </header>
 
       <section className="product-grid">

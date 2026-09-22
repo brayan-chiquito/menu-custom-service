@@ -17,10 +17,19 @@ Corre **en paralelo** al Docker de producción, sin reemplazarlo.
 ## Qué probar
 
 1. Armar pedido → **Guardar sin pagar** → Historial (Pendientes).
-2. **Detalles** abre bottom sheet (header/filtros quedan fijos); cerrar con ✕ o toque fuera.
-3. **Balance** desde Historial → Hoy/Semana/Mes (cobrado, ticket, pendientes).
-4. **Cobrar** un pendiente → pago → confirmación.
-5. Flujo normal **Ir a cobrar** (inmediato) sigue funcionando.
+2. **Detalles** abre bottom sheet; cerrar con ✕ o toque fuera.
+3. **Historial** muestra pedidos de días anteriores; **Cargar más** de 10 en 10.
+4. Pedidos pagados muestran badge **Efectivo** o **Transfer** junto a Pagado.
+5. **Cobrar** con checkbox **Transferencia** → confirmar.
+6. **Balance** Hoy/Semana/Mes en hora Colombia; gastos y ganancia.
+7. **Egresos** desde Balance → restan en ganancia.
+8. Flujo **Ir a cobrar** (inmediato) sigue funcionando.
+9. **⚙ Ajustes**: CRUD productos (toggle proteína), toppings, bases, salsas, proteínas; ver reflejo en Menú.
+10. Historial **Detalles** → Editar / Eliminar (soft-delete; pagados también editables).
+11. Resumen: checkbox **Indicaciones especiales** → textarea; salen en WhatsApp; nombre limpio.
+12. Historial filtro **Eliminados** → **Restaurar** (vuelve al listado/balance).
+13. Balance → **Exportar Excel** del periodo (Hoy/Semana/Mes); botón al pie.
+14. Alertas visibles si falla red o una acción (cerrar con ✕).
 
 ## Arrancar QA de nuevo (si se apagó)
 

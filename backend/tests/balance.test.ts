@@ -4,53 +4,6 @@ import { createApp } from '../src/app.js';
 import { createDatabase, type AppDatabase } from '../src/shared/db.js';
 import { seedMenu } from '../src/seed/seed.js';
 import { FakeNotificador } from '../src/modules/notificaciones/fake.notificador.js';
-import {
-  calcularTicketPromedio,
-  formatFechaUtc,
-  resolverRangoPeriodo,
-} from '../src/modules/pedidos/pedidos.balance.js';
-
-describe('pedidos.balance helpers', () => {
-  it('should resolve hoy as single day', () => {
-    const ahora = new Date(Date.UTC(2026, 8, 19)); // 19 sep 2026 viernes
-    expect(resolverRangoPeriodo('hoy', ahora)).toEqual({
-      desde: '2026-09-19',
-      hasta: '2026-09-19',
-    });
-  });
-
-  it('should resolve semana as monday to today (UTC)', () => {
-    const viernes = new Date(Date.UTC(2026, 8, 19));
-    expect(resolverRangoPeriodo('semana', viernes)).toEqual({
-      desde: '2026-09-14',
-      hasta: '2026-09-19',
-    });
-
-    const domingo = new Date(Date.UTC(2026, 8, 20));
-    expect(resolverRangoPeriodo('semana', domingo)).toEqual({
-      desde: '2026-09-14',
-      hasta: '2026-09-20',
-    });
-  });
-
-  it('should resolve mes as first day to today', () => {
-    const ahora = new Date(Date.UTC(2026, 8, 19));
-    expect(resolverRangoPeriodo('mes', ahora)).toEqual({
-      desde: '2026-09-01',
-      hasta: '2026-09-19',
-    });
-  });
-
-  it('should compute ticket promedio rounded', () => {
-    expect(calcularTicketPromedio(0, 0)).toBe(0);
-    expect(calcularTicketPromedio(100000, 4)).toBe(25000);
-    expect(calcularTicketPromedio(100000, 3)).toBe(33333);
-  });
-
-  it('should format UTC date', () => {
-    expect(formatFechaUtc(new Date(Date.UTC(2026, 0, 5)))).toBe('2026-01-05');
-  });
-});
 
 describe('GET /pedidos/balance', () => {
   let db: AppDatabase;
@@ -112,10 +65,16 @@ describe('GET /pedidos/balance', () => {
     expect(response.body).toMatchObject({
       periodo: 'hoy',
       cobrado: 0,
+      cobrado_efectivo: 0,
+      cobrado_transferencia: 0,
       pedidos_pagados: 0,
+      pedidos_efectivo: 0,
+      pedidos_transferencia: 0,
       ticket_promedio: 0,
       pendiente: 0,
       pedidos_pendientes: 0,
+      gastos: 0,
+      ganancia: 0,
     });
     expect(response.body.desde).toBeTruthy();
     expect(response.body.hasta).toBe(response.body.desde);

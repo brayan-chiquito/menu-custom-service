@@ -1,4 +1,5 @@
 import type { AppDatabase } from '../../shared/db.js';
+import { formatFechaBogota, sqlDateBogota } from '../../shared/time.js';
 import type {
   CatalogoAdicion,
   CatalogoProducto,
@@ -39,8 +40,15 @@ type PedidoRow = {
   monto_pagado: number | null;
   vuelto: number | null;
   estado: 'pendiente' | 'pagado';
+  es_transferencia: number;
+  indicaciones: string | null;
+  eliminado_at?: string | null;
   created_at: string;
 };
+
+const PEDIDO_ACTIVO = `eliminado_at IS NULL`;
+const PEDIDO_ELIMINADO = `eliminado_at IS NOT NULL`;
+
 
 type PedidoItemRow = {
   id: number;
@@ -124,11 +132,11 @@ export class PedidosRepository {
       const result = this.db
         .prepare(
           `
-          INSERT INTO pedidos (nombre_cliente, total, monto_pagado, vuelto, estado)
-          VALUES (?, ?, NULL, NULL, 'pendiente')
+          INSERT INTO pedidos (nombre_cliente, total, monto_pagado, vuelto, estado, indicaciones)
+          VALUES (?, ?, NULL, NULL, 'pendiente', ?)
           `,
         )
-        .run(pedido.nombre_cliente, pedido.total);
+        .run(pedido.nombre_cliente, pedido.total, pedido.indicaciones);
 
       const pedidoId = Number(result.lastInsertRowid);
 
@@ -189,69 +197,153 @@ export class PedidosRepository {
   }
 
   findByFechaHoy(): PedidoResumen[] {
+    const hoy = formatFechaBogota();
     const rows = this.db
       .prepare(
         `
-        SELECT id, nombre_cliente, total, monto_pagado, vuelto, estado, created_at
+        SELECT id, nombre_cliente, total, monto_pagado, vuelto, estado, es_transferencia, indicaciones, created_at
         FROM pedidos
-        WHERE date(created_at) = date('now')
+        WHERE ${PEDIDO_ACTIVO}
+          AND ${sqlDateBogota('created_at')} = date(?)
         ORDER BY created_at DESC, id DESC
         `,
       )
-      .all() as PedidoRow[];
+      .all(hoy) as PedidoRow[];
 
-    return rows.map((row) => ({
+    return rows.map((row) => this.mapResumen(row));
+  }
+
+  findPaginados(query: {
+    limit: number;
+    offset: number;
+    estado?: 'pendiente' | 'pagado';
+    soloEliminados?: boolean;
+  }): { items: PedidoResumen[]; total: number } {
+    const scope = query.soloEliminados ? PEDIDO_ELIMINADO : PEDIDO_ACTIVO;
+    const whereEstado = query.estado
+      ? `WHERE ${scope} AND estado = ?`
+      : `WHERE ${scope}`;
+    const paramsCount = query.estado ? [query.estado] : [];
+    const total = (
+      this.db.prepare(`SELECT COUNT(*) AS n FROM pedidos ${whereEstado}`).get(...paramsCount) as {
+        n: number;
+      }
+    ).n;
+
+    const paramsList = query.estado
+      ? [query.estado, query.limit, query.offset]
+      : [query.limit, query.offset];
+    const rows = this.db
+      .prepare(
+        `
+        SELECT id, nombre_cliente, total, monto_pagado, vuelto, estado, es_transferencia,
+               indicaciones, eliminado_at, created_at
+        FROM pedidos
+        ${whereEstado}
+        ORDER BY created_at DESC, id DESC
+        LIMIT ? OFFSET ?
+        `,
+      )
+      .all(...paramsList) as PedidoRow[];
+
+    return { items: rows.map((row) => this.mapResumen(row)), total };
+  }
+
+  private mapResumen(row: PedidoRow): PedidoResumen {
+    return {
       id: row.id,
       nombre_cliente: row.nombre_cliente,
       total: row.total,
       monto_pagado: row.monto_pagado,
       vuelto: row.vuelto,
       estado: row.estado,
+      es_transferencia: row.es_transferencia === 1,
+      indicaciones: row.indicaciones ?? null,
+      eliminado_at: row.eliminado_at ?? null,
       created_at: row.created_at,
-    }));
+    };
   }
 
   findBalanceEntreFechas(desde: string, hasta: string): {
     cobrado: number;
+    cobrado_efectivo: number;
+    cobrado_transferencia: number;
     pedidos_pagados: number;
+    pedidos_efectivo: number;
+    pedidos_transferencia: number;
     pendiente: number;
     pedidos_pendientes: number;
   } {
+    const dia = sqlDateBogota('created_at');
     const row = this.db
       .prepare(
         `
         SELECT
           COALESCE(SUM(CASE WHEN estado = 'pagado' THEN total ELSE 0 END), 0) AS cobrado,
+          COALESCE(SUM(CASE WHEN estado = 'pagado' AND es_transferencia = 0 THEN total ELSE 0 END), 0) AS cobrado_efectivo,
+          COALESCE(SUM(CASE WHEN estado = 'pagado' AND es_transferencia = 1 THEN total ELSE 0 END), 0) AS cobrado_transferencia,
           COALESCE(SUM(CASE WHEN estado = 'pagado' THEN 1 ELSE 0 END), 0) AS pedidos_pagados,
+          COALESCE(SUM(CASE WHEN estado = 'pagado' AND es_transferencia = 0 THEN 1 ELSE 0 END), 0) AS pedidos_efectivo,
+          COALESCE(SUM(CASE WHEN estado = 'pagado' AND es_transferencia = 1 THEN 1 ELSE 0 END), 0) AS pedidos_transferencia,
           COALESCE(SUM(CASE WHEN estado = 'pendiente' THEN total ELSE 0 END), 0) AS pendiente,
           COALESCE(SUM(CASE WHEN estado = 'pendiente' THEN 1 ELSE 0 END), 0) AS pedidos_pendientes
         FROM pedidos
-        WHERE date(created_at) >= date(?)
-          AND date(created_at) <= date(?)
+        WHERE ${PEDIDO_ACTIVO}
+          AND ${dia} >= date(?)
+          AND ${dia} <= date(?)
         `,
       )
       .get(desde, hasta) as {
       cobrado: number;
+      cobrado_efectivo: number;
+      cobrado_transferencia: number;
       pedidos_pagados: number;
+      pedidos_efectivo: number;
+      pedidos_transferencia: number;
       pendiente: number;
       pedidos_pendientes: number;
     };
 
     return {
       cobrado: row.cobrado,
+      cobrado_efectivo: row.cobrado_efectivo,
+      cobrado_transferencia: row.cobrado_transferencia,
       pedidos_pagados: row.pedidos_pagados,
+      pedidos_efectivo: row.pedidos_efectivo,
+      pedidos_transferencia: row.pedidos_transferencia,
       pendiente: row.pendiente,
       pedidos_pendientes: row.pedidos_pendientes,
     };
   }
 
-  findById(id: number): Pedido | null {
+  /** Pedidos activos (no soft-deleted) en el rango de fechas Bogotá. */
+  findActivosEntreFechas(desde: string, hasta: string): PedidoResumen[] {
+    const dia = sqlDateBogota('created_at');
+    const rows = this.db
+      .prepare(
+        `
+        SELECT id, nombre_cliente, total, monto_pagado, vuelto, estado, es_transferencia,
+               indicaciones, eliminado_at, created_at
+        FROM pedidos
+        WHERE ${PEDIDO_ACTIVO}
+          AND ${dia} >= date(?)
+          AND ${dia} <= date(?)
+        ORDER BY created_at DESC, id DESC
+        `,
+      )
+      .all(desde, hasta) as PedidoRow[];
+    return rows.map((row) => this.mapResumen(row));
+  }
+
+  findById(id: number, opts?: { incluirEliminados?: boolean }): Pedido | null {
+    const scope = opts?.incluirEliminados ? '1=1' : PEDIDO_ACTIVO;
     const pedido = this.db
       .prepare(
         `
-        SELECT id, nombre_cliente, total, monto_pagado, vuelto, estado, created_at
+        SELECT id, nombre_cliente, total, monto_pagado, vuelto, estado, es_transferencia,
+               indicaciones, eliminado_at, created_at
         FROM pedidos
-        WHERE id = ?
+        WHERE id = ? AND ${scope}
         `,
       )
       .get(id) as PedidoRow | undefined;
@@ -322,6 +414,9 @@ export class PedidosRepository {
       monto_pagado: pedido.monto_pagado,
       vuelto: pedido.vuelto,
       estado: pedido.estado,
+      es_transferencia: pedido.es_transferencia === 1,
+      indicaciones: pedido.indicaciones ?? null,
+      eliminado_at: pedido.eliminado_at ?? null,
       created_at: pedido.created_at,
       items: itemsConAdiciones,
     };
@@ -406,7 +501,7 @@ export class PedidosRepository {
   }
 
   findDetalleVista(id: number): PedidoDetalle | null {
-    const pedido = this.findById(id);
+    const pedido = this.findById(id, { incluirEliminados: true });
     if (!pedido) {
       return null;
     }
@@ -416,8 +511,11 @@ export class PedidosRepository {
         `
         SELECT
           pi.id AS item_id,
+          pi.producto_id AS producto_id,
           pi.cantidad AS cantidad,
           pi.precio_unit_momento AS precio_unit_momento,
+          pi.base_id AS base_id,
+          pi.proteina_id AS proteina_id,
           p.nombre AS producto_nombre,
           b.nombre AS base_nombre,
           pr.nombre AS proteina_nombre
@@ -431,8 +529,11 @@ export class PedidosRepository {
       )
       .all(id) as Array<{
       item_id: number;
+      producto_id: number;
       cantidad: number;
       precio_unit_momento: number;
+      base_id: number | null;
+      proteina_id: number | null;
       producto_nombre: string;
       base_nombre: string | null;
       proteina_nombre: string | null;
@@ -440,7 +541,7 @@ export class PedidosRepository {
 
     const salsasStmt = this.db.prepare(
       `
-      SELECT s.nombre
+      SELECT s.id AS id, s.nombre AS nombre
       FROM pedido_item_salsas pis
       INNER JOIN salsas s ON s.id = pis.salsa_id
       WHERE pis.pedido_item_id = ?
@@ -450,7 +551,7 @@ export class PedidosRepository {
 
     const adicionesStmt = this.db.prepare(
       `
-      SELECT a.nombre AS nombre, pia.precio_momento AS precio_momento
+      SELECT a.id AS adicion_id, a.nombre AS nombre, pia.precio_momento AS precio_momento
       FROM pedido_item_adiciones pia
       INNER JOIN adiciones a ON a.id = pia.adicion_id
       WHERE pia.pedido_item_id = ?
@@ -465,23 +566,34 @@ export class PedidosRepository {
       monto_pagado: pedido.monto_pagado,
       vuelto: pedido.vuelto,
       estado: pedido.estado,
+      es_transferencia: pedido.es_transferencia,
+      indicaciones: pedido.indicaciones,
+      eliminado_at: pedido.eliminado_at ?? null,
       created_at: pedido.created_at,
       lineas: lineas.map((linea) => {
         const adiciones = (
-          adicionesStmt.all(linea.item_id) as Array<{ nombre: string; precio_momento: number }>
+          adicionesStmt.all(linea.item_id) as Array<{
+            adicion_id: number;
+            nombre: string;
+            precio_momento: number;
+          }>
         ).map((a) => ({
+          adicion_id: a.adicion_id,
           nombre: a.nombre,
           precio_momento: a.precio_momento,
         }));
+        const salsas = salsasStmt.all(linea.item_id) as Array<{ id: number; nombre: string }>;
         const extras = adiciones.reduce((sum, a) => sum + a.precio_momento, 0);
         const subtotal = linea.cantidad * (linea.precio_unit_momento + extras);
         return {
           cantidad: linea.cantidad,
+          producto_id: linea.producto_id,
           producto_nombre: linea.producto_nombre,
+          base_id: linea.base_id,
           base_nombre: linea.base_nombre,
-          salsa_nombres: (salsasStmt.all(linea.item_id) as Array<{ nombre: string }>).map(
-            (s) => s.nombre,
-          ),
+          salsa_ids: salsas.map((s) => s.id),
+          salsa_nombres: salsas.map((s) => s.nombre),
+          proteina_id: linea.proteina_id,
           proteina_nombre: linea.proteina_nombre,
           adiciones,
           precio_unit_momento: linea.precio_unit_momento,
@@ -491,16 +603,16 @@ export class PedidosRepository {
     };
   }
 
-  registrarPago(id: number, montoPagado: number, vuelto: number): Pedido {
+  registrarPago(id: number, montoPagado: number, vuelto: number, esTransferencia: boolean): Pedido {
     const result = this.db
       .prepare(
         `
         UPDATE pedidos
-        SET monto_pagado = ?, vuelto = ?
-        WHERE id = ?
+        SET monto_pagado = ?, vuelto = ?, es_transferencia = ?
+        WHERE id = ? AND eliminado_at IS NULL
         `,
       )
-      .run(montoPagado, vuelto, id);
+      .run(montoPagado, vuelto, esTransferencia ? 1 : 0, id);
 
     if (result.changes === 0) {
       throw new Error(`Pedido #${id} no encontrado al registrar pago`);
@@ -520,7 +632,7 @@ export class PedidosRepository {
         `
         UPDATE pedidos
         SET estado = 'pagado'
-        WHERE id = ? AND estado = 'pendiente'
+        WHERE id = ? AND estado = 'pendiente' AND ${PEDIDO_ACTIVO}
         `,
       )
       .run(id);
@@ -534,6 +646,133 @@ export class PedidosRepository {
       throw new Error(`No se pudo leer el pedido #${id} tras confirmar`);
     }
 
+    return actualizado;
+  }
+
+  softDelete(id: number): boolean {
+    const result = this.db
+      .prepare(
+        `
+        UPDATE pedidos
+        SET eliminado_at = datetime('now')
+        WHERE id = ? AND ${PEDIDO_ACTIVO}
+        `,
+      )
+      .run(id);
+    return result.changes > 0;
+  }
+
+  restaurar(id: number): boolean {
+    const result = this.db
+      .prepare(
+        `
+        UPDATE pedidos
+        SET eliminado_at = NULL
+        WHERE id = ? AND ${PEDIDO_ELIMINADO}
+        `,
+      )
+      .run(id);
+    return result.changes > 0;
+  }
+
+  /**
+   * Actualiza cabecera y, si hay items, reemplaza todas las líneas.
+   * Mantiene estado / es_transferencia; monto y vuelto vienen ya calculados.
+   */
+  actualizarPedido(
+    id: number,
+    data: {
+      nombre_cliente: string;
+      total: number;
+      monto_pagado: number | null;
+      vuelto: number | null;
+      indicaciones: string | null;
+      items?: PedidoACrear['items'];
+    },
+  ): Pedido {
+    const txn = this.db.transaction(() => {
+      const result = this.db
+        .prepare(
+          `
+          UPDATE pedidos
+          SET nombre_cliente = ?, total = ?, monto_pagado = ?, vuelto = ?, indicaciones = ?
+          WHERE id = ? AND ${PEDIDO_ACTIVO}
+          `,
+        )
+        .run(
+          data.nombre_cliente,
+          data.total,
+          data.monto_pagado,
+          data.vuelto,
+          data.indicaciones,
+          id,
+        );
+
+      if (result.changes === 0) {
+        throw new Error(`Pedido #${id} no encontrado al actualizar`);
+      }
+
+      if (data.items) {
+        const itemIds = (
+          this.db.prepare(`SELECT id FROM pedido_items WHERE pedido_id = ?`).all(id) as Array<{
+            id: number;
+          }>
+        ).map((r) => r.id);
+
+        const delAdiciones = this.db.prepare(
+          `DELETE FROM pedido_item_adiciones WHERE pedido_item_id = ?`,
+        );
+        const delSalsas = this.db.prepare(`DELETE FROM pedido_item_salsas WHERE pedido_item_id = ?`);
+        for (const itemId of itemIds) {
+          delAdiciones.run(itemId);
+          delSalsas.run(itemId);
+        }
+        this.db.prepare(`DELETE FROM pedido_items WHERE pedido_id = ?`).run(id);
+
+        const insertItem = this.db.prepare(
+          `
+          INSERT INTO pedido_items (
+            pedido_id, producto_id, cantidad, precio_unit_momento, base_id, proteina_id
+          )
+          VALUES (?, ?, ?, ?, ?, ?)
+          `,
+        );
+        const insertSalsa = this.db.prepare(
+          `INSERT INTO pedido_item_salsas (pedido_item_id, salsa_id) VALUES (?, ?)`,
+        );
+        const insertAdicion = this.db.prepare(
+          `
+          INSERT INTO pedido_item_adiciones (pedido_item_id, adicion_id, precio_momento)
+          VALUES (?, ?, ?)
+          `,
+        );
+
+        for (const item of data.items) {
+          const itemResult = insertItem.run(
+            id,
+            item.producto_id,
+            item.cantidad,
+            item.precio_unit_momento,
+            item.base_id,
+            item.proteina_id,
+          );
+          const pedidoItemId = Number(itemResult.lastInsertRowid);
+          for (const salsaId of item.salsa_ids) {
+            insertSalsa.run(pedidoItemId, salsaId);
+          }
+          for (const adicion of item.adiciones) {
+            insertAdicion.run(pedidoItemId, adicion.adicion_id, adicion.precio_momento);
+          }
+        }
+      }
+    });
+
+    txn();
+
+    const actualizado = this.findById(id);
+    if (!actualizado) {
+      throw new Error(`No se pudo leer el pedido #${id} tras actualizar`);
+    }
     return actualizado;
   }
 

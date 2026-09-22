@@ -1,0 +1,32 @@
+meta {
+  name: Actualizar pedido
+  type: http
+  seq: 10
+}
+
+patch {
+  url: {{baseUrl}}/pedidos/1
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "nombre_cliente": "Cliente editado",
+    "indicaciones": "Sin cebolla",
+    "items": [
+      {
+        "producto_id": 1,
+        "cantidad": 1,
+        "base_id": 1,
+        "salsa_ids": [1],
+        "adiciones": []
+      }
+    ]
+  }
+}
+
+docs {
+  ## PATCH /pedidos/:id
+  Edita nombre, indicaciones y/o ítems (pendiente o pagado). Soft-delete no aplica aquí.
+}

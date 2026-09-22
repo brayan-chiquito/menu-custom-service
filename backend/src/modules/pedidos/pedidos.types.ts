@@ -11,6 +11,7 @@ export type CrearPedidoItemInput = {
 
 export type CrearPedidoInput = {
   nombre_cliente?: string | null;
+  indicaciones?: string | null;
   items: CrearPedidoItemInput[];
 };
 
@@ -44,6 +45,9 @@ export type Pedido = {
   monto_pagado: number | null;
   vuelto: number | null;
   estado: PedidoEstado;
+  es_transferencia: boolean;
+  indicaciones: string | null;
+  eliminado_at?: string | null;
   created_at: string;
   items: PedidoItem[];
 };
@@ -56,31 +60,58 @@ export type PedidoResumen = {
   monto_pagado: number | null;
   vuelto: number | null;
   estado: PedidoEstado;
+  es_transferencia: boolean;
+  indicaciones: string | null;
+  eliminado_at?: string | null;
   created_at: string;
+};
+
+export type ListaPedidosQuery = {
+  limit: number;
+  offset: number;
+  estado?: PedidoEstado;
+};
+
+export type ListaPedidosResponse = {
+  items: PedidoResumen[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
 };
 
 export type PeriodoBalance = 'hoy' | 'semana' | 'mes';
 
-/** Agregados de ventas para GET /pedidos/balance. */
+/** Agregados de ventas + gastos para GET /pedidos/balance. */
 export type BalanceVentas = {
   periodo: PeriodoBalance;
   desde: string;
   hasta: string;
   cobrado: number;
+  cobrado_efectivo: number;
+  cobrado_transferencia: number;
   pedidos_pagados: number;
+  pedidos_efectivo: number;
+  pedidos_transferencia: number;
   ticket_promedio: number;
   pendiente: number;
   pedidos_pendientes: number;
+  gastos: number;
+  ganancia: number;
 };
 
 /** Línea legible para UI de detalle en historial. */
 export type PedidoDetalleLinea = {
   cantidad: number;
+  producto_id: number;
   producto_nombre: string;
+  base_id: number | null;
   base_nombre: string | null;
+  salsa_ids: number[];
   salsa_nombres: string[];
+  proteina_id: number | null;
   proteina_nombre: string | null;
-  adiciones: Array<{ nombre: string; precio_momento: number }>;
+  adiciones: Array<{ adicion_id: number; nombre: string; precio_momento: number }>;
   precio_unit_momento: number;
   subtotal: number;
 };
@@ -93,6 +124,9 @@ export type PedidoDetalle = {
   monto_pagado: number | null;
   vuelto: number | null;
   estado: PedidoEstado;
+  es_transferencia: boolean;
+  indicaciones: string | null;
+  eliminado_at?: string | null;
   created_at: string;
   lineas: PedidoDetalleLinea[];
 };
@@ -134,11 +168,19 @@ export type PedidoItemACrear = {
 export type PedidoACrear = {
   nombre_cliente: string;
   total: number;
+  indicaciones: string | null;
   items: PedidoItemACrear[];
+};
+
+export type ActualizarPedidoInput = {
+  nombre_cliente?: string | null;
+  indicaciones?: string | null;
+  items?: CrearPedidoItemInput[];
 };
 
 export type RegistrarPagoInput = {
   monto_pagado: number;
+  es_transferencia?: boolean;
 };
 
 export type ConfirmarPedidoResponse = Pedido & {

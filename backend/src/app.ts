@@ -5,14 +5,20 @@ import { errorMiddleware } from './shared/middlewares/error.middleware.js';
 import { ProductosRepository } from './modules/productos/productos.repository.js';
 import { ProductosService } from './modules/productos/productos.service.js';
 import { ProductosController } from './modules/productos/productos.controller.js';
-import { createProductosRouter } from './modules/productos/productos.routes.js';
+import { createCatalogoRouter, createProductosRouter } from './modules/productos/productos.routes.js';
 import { PedidosRepository } from './modules/pedidos/pedidos.repository.js';
 import { PedidosService } from './modules/pedidos/pedidos.service.js';
 import { PedidosController } from './modules/pedidos/pedidos.controller.js';
 import { createPedidosRouter } from './modules/pedidos/pedidos.routes.js';
+import { EgresosRepository } from './modules/egresos/egresos.repository.js';
+import { EgresosService } from './modules/egresos/egresos.service.js';
+import { EgresosController } from './modules/egresos/egresos.controller.js';
+import { createEgresosRouter } from './modules/egresos/egresos.routes.js';
 import { FakeNotificador } from './modules/notificaciones/fake.notificador.js';
 import { WhatsappNotificador } from './modules/notificaciones/whatsapp.notificador.js';
 import type { Notificador } from './modules/notificaciones/notificador.interface.js';
+import { resolverRangoPeriodo } from './modules/pedidos/pedidos.balance.js';
+import type { PeriodoBalance } from './modules/pedidos/pedidos.types.js';
 
 export function createNotificador(): Notificador {
   const target = process.env.WHATSAPP_TARGET_NUMBER?.trim();
@@ -31,11 +37,29 @@ export function createApp(db: AppDatabase, notificador: Notificador = createNoti
   const productosService = new ProductosService(productosRepository);
   const productosController = new ProductosController(productosService);
 
+  const egresosRepository = new EgresosRepository(db);
+  const egresosService = new EgresosService(egresosRepository);
+  const egresosController = new EgresosController(egresosService);
+
   const pedidosRepository = new PedidosRepository(db);
   const pedidosService = new PedidosService(pedidosRepository, notificador);
-  const pedidosController = new PedidosController(pedidosService);
+  const pedidosController = new PedidosController(
+    pedidosService,
+    (periodo) => {
+      const { desde, hasta } = resolverRangoPeriodo(periodo);
+      return egresosRepository.sumTotalEntreFechas(desde, hasta);
+    },
+    (periodo) => {
+      const { desde, hasta } = resolverRangoPeriodo(periodo);
+      return egresosRepository.findEntreFechas(desde, hasta);
+    },
+  );
 
-  app.use(cors());
+  app.use(
+    cors({
+      exposedHeaders: ['Content-Disposition'],
+    }),
+  );
   app.use(express.json());
 
   app.get('/health', (_req, res) => {
@@ -47,9 +71,13 @@ export function createApp(db: AppDatabase, notificador: Notificador = createNoti
   });
 
   app.use('/menu', createProductosRouter(productosController));
+  app.use('/catalogo', createCatalogoRouter(productosController));
   app.use('/pedidos', createPedidosRouter(pedidosController));
+  app.use('/egresos', createEgresosRouter(egresosController));
 
   app.use(errorMiddleware);
 
   return app;
 }
+
+export type { PeriodoBalance };

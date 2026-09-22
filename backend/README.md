@@ -121,6 +121,7 @@ curl -X POST http://localhost:3000/pedidos \
 {
   "id": 1,
   "nombre_cliente": "Ana",
+  "indicaciones": null,
   "total": 24000,
   "monto_pagado": null,
   "vuelto": null,
@@ -139,7 +140,15 @@ curl -X POST http://localhost:3000/pedidos \
 }
 ```
 
+### POST /pedidos (con indicaciones)
 
+```bash
+curl -X POST http://localhost:3000/pedidos \
+  -H "Content-Type: application/json" \
+  -d "{\"nombre_cliente\":\"Mauricio\",\"indicaciones\":\"Sin chicharrón · +maíz\",\"items\":[{\"producto_id\":1,\"cantidad\":1,\"base_id\":1,\"salsa_ids\":[1],\"adiciones\":[]}]}"
+```
+
+**Debería responder** — `201` con `indicaciones: "Sin chicharrón · +maíz"`. Vacío/null → no se guarda ni sale en WhatsApp.
 
 ### POST /pedidos (sin proteína — Apoteósico)
 
@@ -156,10 +165,20 @@ curl -X POST http://localhost:3000/pedidos \
 ```bash
 curl -X PATCH http://localhost:3000/pedidos/1/pago \
   -H "Content-Type: application/json" \
-  -d "{\"monto_pagado\":30000}"
+  -d "{\"monto_pagado\":30000,\"es_transferencia\":false}"
 ```
 
-**Debería responder** — `200`, `vuelto: 6000`, `estado: "pendiente"`.
+**Debería responder** — `200`, `vuelto: 6000`, `estado: "pendiente"`, `es_transferencia: false`.
+
+Con transferencia:
+
+```bash
+curl -X PATCH http://localhost:3000/pedidos/1/pago \
+  -H "Content-Type: application/json" \
+  -d "{\"monto_pagado\":24000,\"es_transferencia\":true}"
+```
+
+**Debería responder** — `200` con `es_transferencia: true`.
 
 ### PATCH /pedidos/:id/pago (insuficiente)
 
@@ -211,7 +230,7 @@ mismo `mensaje` listo para “Copiar pedido” en el frontend.
 curl "http://localhost:3000/pedidos?fecha=hoy"
 ```
 
-**Debería responder** — `200` (array; vacío `[]` si no hay pedidos del día):
+**Debería responder** — `200` (array; vacío `[]` si no hay pedidos del día Bogotá):
 
 ```json
 [
@@ -222,13 +241,40 @@ curl "http://localhost:3000/pedidos?fecha=hoy"
     "monto_pagado": 30000,
     "vuelto": 6000,
     "estado": "pagado",
+    "es_transferencia": false,
     "created_at": "2026-09-18 05:50:00"
   }
 ]
 ```
 
-Filtra con `date(created_at) = date('now')` (mismo criterio UTC que el
-default SQLite `datetime('now')`). No incluye `items` (historial).
+Filtra con calendario **America/Bogotá** (`date(created_at, '-5 hours')`).
+No incluye `items` (historial).
+
+### GET /pedidos?limit=10&offset=0&estado=
+
+```bash
+curl "http://localhost:3000/pedidos?limit=10&offset=0"
+curl "http://localhost:3000/pedidos?limit=10&offset=10&estado=pagado"
+```
+
+**Debería responder** — `200`:
+
+```json
+{
+  "items": [],
+  "total": 12,
+  "limit": 10,
+  "offset": 0,
+  "has_more": true
+}
+```
+
+- Sin `fecha`: todos los pedidos, más recientes primero.
+- `estado` opcional: `pendiente` | `pagado`.
+- Default `limit=10` (máx. 50), `offset=0`.
+
+Bruno: `listar-pedidos-hoy.bru`, `listar-pedidos-paginado.bru`.
+Tests: `tests/historial.test.ts`, `tests/time-bogota.test.ts`.
 
 ### GET /pedidos/balance?periodo=hoy|semana|mes
 
@@ -244,28 +290,204 @@ curl "http://localhost:3000/pedidos/balance?periodo=hoy"
   "desde": "2026-09-19",
   "hasta": "2026-09-19",
   "cobrado": 150000,
+  "cobrado_efectivo": 90000,
+  "cobrado_transferencia": 60000,
   "pedidos_pagados": 8,
+  "pedidos_efectivo": 5,
+  "pedidos_transferencia": 3,
   "ticket_promedio": 18750,
   "pendiente": 45000,
-  "pedidos_pendientes": 2
+  "pedidos_pendientes": 2,
+  "gastos": 12000,
+  "ganancia": 138000
 }
 ```
 
-- **hoy**: solo el día actual (UTC, mismo criterio que historial).
-- **semana**: lunes → hoy (UTC).
-- **mes**: día 1 del mes → hoy.
+- **hoy** / **semana** / **mes**: calendario **America/Bogotá**.
 - `cobrado` / `pedidos_pagados` / `ticket_promedio` solo cuentan `pagado`.
+- `cobrado_efectivo` / `cobrado_transferencia` según `es_transferencia` al pagar.
+- `gastos` = suma de totales de egresos del periodo; `ganancia` = cobrado − gastos.
 - `pendiente` no infla cobrado.
 
-Bruno: `obtener-balance.bru`. Tests: `tests/balance.test.ts`.
+Bruno: `obtener-balance.bru`. Tests: `tests/balance.test.ts`, `tests/egresos-balance.test.ts`.
+
+### GET /pedidos/balance/export?periodo=hoy|semana|mes
+
+```bash
+curl -OJ "http://localhost:3000/pedidos/balance/export?periodo=semana"
+```
+
+**Debería responder** `200` con archivo `.xlsx`
+(`Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`).
+
+- Hojas: **Resumen**, **Historial** (pedidos del periodo), **Egresos** (AutoFilter).
+- Nombre según periodo:
+  - hoy → `balance-platanopolis-hoy-YYYY-MM-DD.xlsx`
+  - semana → `balance-platanopolis-semana-YYYY-MM-DD_al_YYYY-MM-DD.xlsx`
+  - mes → `balance-platanopolis-mes-YYYY-MM.xlsx`
+- Mismo rango Bogotá que el balance JSON; sin pedidos soft-deleted.
+
+Bruno: `obtener-balance-export.bru`. Tests: `tests/balance-export.test.ts`.
+
+### POST /egresos
+
+```bash
+curl -X POST http://localhost:3000/egresos \
+  -H "Content-Type: application/json" \
+  -d "{\"nombre\":\"Platano\",\"precio\":2000,\"cantidad\":3}"
+```
+
+**Debería responder** — `201`:
+
+```json
+{
+  "id": 1,
+  "nombre": "Platano",
+  "precio": 2000,
+  "cantidad": 3,
+  "total": 6000,
+  "created_at": "2026-09-19 12:00:00"
+}
+```
+
+### GET /egresos?periodo=hoy|semana|mes
+
+```bash
+curl "http://localhost:3000/egresos?periodo=hoy"
+```
+
+**Debería responder** — `200` (array de egresos del periodo).
+
+Bruno: `04-egresos/`. Tests: `tests/egresos-balance.test.ts`.
+
+### GET/POST/PATCH/DELETE /catalogo/productos
+
+```bash
+curl http://localhost:3000/catalogo/productos
+```
+
+```bash
+curl -X POST http://localhost:3000/catalogo/productos \
+  -H "Content-Type: application/json" \
+  -d "{\"nombre\":\"Especial QA\",\"descripcion\":\"test\",\"precio\":15000,\"categoria\":\"platos\",\"disponible\":true,\"requiere_proteina\":true}"
+```
+
+**Debería responder** `201`:
+
+```json
+{
+  "id": 10,
+  "nombre": "Especial QA",
+  "descripcion": "test",
+  "precio": 15000,
+  "categoria": "platos",
+  "disponible": true,
+  "requiere_proteina": true
+}
+```
+
+```bash
+curl -X PATCH http://localhost:3000/catalogo/productos/10 \
+  -H "Content-Type: application/json" \
+  -d "{\"requiere_proteina\":false}"
+```
+
+**Debería responder** `200` con el producto actualizado.
+
+```bash
+curl -X DELETE http://localhost:3000/catalogo/productos/10
+```
+
+**Debería responder** `204` (sin cuerpo). Si hay referencias: `409`/`400` con mensaje claro.
+
+### POST /catalogo/adiciones · bases · salsas · proteinas
+
+```bash
+curl -X POST http://localhost:3000/catalogo/adiciones \
+  -H "Content-Type: application/json" \
+  -d "{\"nombre\":\"Extra queso\",\"precio\":2500}"
+```
+
+```bash
+curl -X POST http://localhost:3000/catalogo/bases \
+  -H "Content-Type: application/json" \
+  -d "{\"nombre\":\"Base QA\"}"
+```
+
+```bash
+curl -X POST http://localhost:3000/catalogo/proteinas \
+  -H "Content-Type: application/json" \
+  -d "{\"nombre\":\"Cerdo\"}"
+```
+
+**Debería responder** `201` con `{ id, nombre, ... }`. Mismo patrón `GET/PATCH/DELETE` en `/catalogo/salsas` y `/catalogo/proteinas`.
+
+Bruno: `05-catalogo/`. Tests: `tests/catalogo-crud.test.ts`.
 
 ### GET /pedidos/:id
+
+```bash
+curl http://localhost:3000/pedidos/1
+```
+
+**Debería responder** `200` con `lineas` (incluye ids de producto/base/salsas/proteína/adiciones).
+
+### PATCH /pedidos/:id
+
+```bash
+curl -X PATCH http://localhost:3000/pedidos/1 \
+  -H "Content-Type: application/json" \
+  -d "{\"nombre_cliente\":\"Ana\",\"indicaciones\":\"Sin cebolla\",\"items\":[{\"producto_id\":1,\"cantidad\":1,\"base_id\":1,\"salsa_ids\":[1],\"adiciones\":[]}]}"
+```
+
+**Debería responder** `200` con el pedido actualizado (nombre, indicaciones y/o ítems). En pagado ajusta monto/vuelto.
+
+### DELETE /pedidos/:id
+
+```bash
+curl -X DELETE http://localhost:3000/pedidos/1
+```
+
+**Debería responder** `204`. Soft-delete (`eliminado_at`); deja de salir en historial/balance.
+
+### GET /pedidos?eliminados=1
+
+```bash
+curl "http://localhost:3000/pedidos?limit=10&offset=0&eliminados=1"
+```
+
+**Debería responder** `200` con solo pedidos soft-deleted:
+
+```json
+{
+  "items": [{ "id": 1, "nombre_cliente": "Ana", "eliminado_at": "2026-09-20 18:00:00", "estado": "pendiente" }],
+  "total": 1,
+  "limit": 10,
+  "offset": 0,
+  "has_more": false
+}
+```
+
+### PATCH /pedidos/:id/restaurar
+
+```bash
+curl -X PATCH http://localhost:3000/pedidos/1/restaurar
+```
+
+**Debería responder** `200` con el pedido restaurado (`eliminado_at: null`). Vuelve al historial/balance.
+
+Bruno: `crear-pedido-indicaciones.bru`, `listar-pedidos-eliminados.bru`, `restaurar-pedido.bru`.
+Tests: `tests/indicaciones-restaurar.test.ts`.
+
+Bruno (Task 19): `actualizar-pedido.bru`, `eliminar-pedido.bru`. Tests: `tests/pedidos-editar-eliminar.test.ts`.
+
+### GET /pedidos/:id (detalle)
 
 ```bash
 curl "http://localhost:3000/pedidos/1"
 ```
 
-**Debería responder** — `200` con el pedido y `lineas` legibles:
+**Debería responder** — `200` con el pedido y `lineas` legibles (incluye ids para edición):
 
 ```json
 {
@@ -279,9 +501,13 @@ curl "http://localhost:3000/pedidos/1"
   "lineas": [
     {
       "cantidad": 1,
+      "producto_id": 1,
       "producto_nombre": "Quesudo",
+      "base_id": 1,
       "base_nombre": "Verde",
+      "salsa_ids": [1],
       "salsa_nombres": ["Ajo"],
+      "proteina_id": null,
       "proteina_nombre": null,
       "adiciones": [],
       "precio_unit_momento": 10000,
@@ -291,7 +517,7 @@ curl "http://localhost:3000/pedidos/1"
 }
 ```
 
-Sirve para cobrar después y para **Detalles** en el historial.
+Sirve para cobrar después, **Detalles** y **Editar** en el historial.
 
 ### Cobro diferido (guardar → pagar luego)
 
@@ -350,14 +576,53 @@ Tests: `tests/pedidos-pago.test.ts` (GET por id + pay later).
 - Mensaje con cliente, productos, base/salsa/proteína/adiciones si aplican, y total.
 - Fallos solo se loggean.
 
-### Historial — GET /pedidos?fecha=hoy
+### Historial — GET /pedidos (paginado) + fecha=hoy
 
-- Lista pedidos del día (resumen sin items).
-- Tests: `tests/historial.test.ts`.
-- Bruno: `bruno/03-pedidos/listar-pedidos-hoy.bru`.
+- `GET /pedidos?limit=&offset=&estado=` — ver curl arriba.
+- `GET /pedidos?fecha=hoy` — día Bogotá (compat).
+- Zona horaria: America/Bogotá en balance, egresos e historial.
+- Tests: `tests/historial.test.ts`, `tests/time-bogota.test.ts`.
 
-### Detalle / cobro diferido / balance
+### Task 17 — Historial paginado + medio de pago + Bogotá
 
-- `GET /pedidos/:id`, cobro diferido y `GET /pedidos/balance` — ver secciones curl arriba.
+- Bruno: `listar-pedidos-paginado.bru`.
+- Frontend: título Historial, Cargar más, badges Efectivo/Transfer.
+
+### Detalle / cobro diferido / balance / egresos
+
+- `GET /pedidos/:id`, cobro diferido, `GET /pedidos/balance` y egresos — ver secciones curl arriba.
 - Migración v3→v4: `base_id` nullable **sin** borrar pedidos (`tests/migrate-v4.test.ts`).
+- Migración v4→v5: tabla `egresos` + columna `es_transferencia` (`tests/egresos-balance.test.ts`).
+
+### Task 16 — Egresos + transferencia + ganancia
+
+- `POST/GET /egresos`, pago con `es_transferencia`, balance con desglose y ganancia.
+- Bruno: `04-egresos/`, `registrar-pago.bru`, `obtener-balance.bru`.
+- Tests: `tests/egresos-balance.test.ts`.
+
+### Task 18 — CRUD catálogo (RF-16)
+
+- `GET/POST/PATCH/DELETE /catalogo/productos|adiciones|bases|salsas|proteinas`.
+- Productos: `requiere_proteina` por ítem (bebidas → siempre `false`).
+- Bruno: `05-catalogo/`. Tests: `tests/catalogo-crud.test.ts`.
+
+### Task 19 — Editar / eliminar pedidos (RF-17)
+
+- `PATCH /pedidos/:id` (nombre + ítems; pendiente y pagado).
+- `DELETE /pedidos/:id` soft-delete (`eliminado_at`); fuera de listado/balance.
+- Bruno: `actualizar-pedido.bru`, `eliminar-pedido.bru`.
+- Tests: `tests/pedidos-editar-eliminar.test.ts`.
+
+### Task 20 — Indicaciones + restaurar eliminados (RF-18/19)
+
+- `indicaciones` opcional en `POST/PATCH /pedidos`; línea en WhatsApp si hay texto.
+- `GET /pedidos?eliminados=1` + `PATCH /pedidos/:id/restaurar`.
+- Bruno: `crear-pedido-indicaciones.bru`, `listar-pedidos-eliminados.bru`, `restaurar-pedido.bru`.
+- Tests: `tests/indicaciones-restaurar.test.ts`.
+
+### Task 21 — Exportar balance Excel (RF-20)
+
+- `GET /pedidos/balance/export?periodo=hoy|semana|mes` → `.xlsx` (exceljs).
+- Hojas Resumen / Historial / Egresos con AutoFilter; nombre con fechas del periodo.
+- Bruno: `obtener-balance-export.bru`. Tests: `tests/balance-export.test.ts`.
 

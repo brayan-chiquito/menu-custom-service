@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createDatabase } from '../src/shared/db.js';
 import { seedMenu } from '../src/seed/seed.js';
 
-describe('migrate v3 → v4 (nullable base_id)', () => {
+describe('migrate v3 → v7 (nullable base + egresos + soft-delete + indicaciones)', () => {
   const tempFiles: string[] = [];
 
   afterEach(() => {
@@ -113,6 +113,15 @@ describe('migrate v3 → v4 (nullable base_id)', () => {
         notnull: number;
       }>
     ).find((c) => c.name === 'base_id');
+    const transferCol = (
+      upgraded.prepare(`PRAGMA table_info(pedidos)`).all() as Array<{ name: string }>
+    ).find((c) => c.name === 'es_transferencia');
+    const eliminadoCol = (
+      upgraded.prepare(`PRAGMA table_info(pedidos)`).all() as Array<{ name: string }>
+    ).find((c) => c.name === 'eliminado_at');
+    const egresosTable = upgraded
+      .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'egresos'`)
+      .get() as { name: string } | undefined;
     const version = (
       upgraded.prepare(`SELECT MAX(version) AS v FROM schema_migrations`).get() as { v: number }
     ).v;
@@ -122,7 +131,10 @@ describe('migrate v3 → v4 (nullable base_id)', () => {
     expect(limonada.precio).toBe(3000);
     expect(limonada.categoria).toBe('bebidas');
     expect(baseCol?.notnull).toBe(0);
-    expect(version).toBe(4);
+    expect(transferCol).toBeTruthy();
+    expect(eliminadoCol).toBeTruthy();
+    expect(egresosTable?.name).toBe('egresos');
+    expect(version).toBe(7);
 
     upgraded.close();
   });

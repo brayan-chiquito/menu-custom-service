@@ -25,3 +25,29 @@ describe('cobro diferido rules', () => {
     expect(resolverFlujoCobro({ pedidoId: null, itemsEnCarrito: 0 })).toBe('vacio');
   });
 });
+
+/** Transferencia: monto = total exacto; input bloqueado en UI. */
+function resolverMontoCobro(input: {
+  esTransferencia: boolean;
+  total: number;
+  montoEscrito: string;
+}): number {
+  if (input.esTransferencia) {
+    return input.total;
+  }
+  return Number(input.montoEscrito.replace(/\D/g, '')) || 0;
+}
+
+describe('cobro transferencia monto', () => {
+  it('should force exact total when transferencia', () => {
+    expect(
+      resolverMontoCobro({ esTransferencia: true, total: 22000, montoEscrito: '0' }),
+    ).toBe(22000);
+  });
+
+  it('should use typed amount when efectivo', () => {
+    expect(
+      resolverMontoCobro({ esTransferencia: false, total: 22000, montoEscrito: '50000' }),
+    ).toBe(50000);
+  });
+});

@@ -1,0 +1,16 @@
+meta {
+  name: Eliminar producto
+  type: http
+  seq: 4
+}
+
+delete {
+  url: {{baseUrl}}/catalogo/productos/9999
+  body: none
+  auth: none
+}
+
+docs {
+  ## DELETE /catalogo/productos/:id
+  204 si elimina; error claro si hay referencias (FK).
+}

@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { AlertError } from '../../shared/components/AlertError';
 import { Button } from '../../shared/components/Button';
 import { Input } from '../../shared/components/Input';
 import { useCobro } from './useCobro';
@@ -8,6 +9,8 @@ export function Cobro() {
     total,
     montoRecibido,
     setMontoRecibido,
+    esTransferencia,
+    setTransferencia,
     resumenVuelto,
     puedeConfirmar,
     phase,
@@ -15,6 +18,7 @@ export function Cobro() {
     confirmarPago,
     copiarPedido,
     nuevoPedido,
+    clearErrorAlert,
     vacio,
     contexto,
     backTo,
@@ -73,29 +77,49 @@ export function Cobro() {
         </Link>
       </header>
 
-      {contexto ? <p className="muted">{contexto}</p> : null}
+      {phase.status === 'error' ? (
+        <AlertError
+          title={phase.alert.title}
+          message={phase.alert.message}
+          onClose={clearErrorAlert}
+        />
+      ) : null}
 
-      <p className="muted">Total a cobrar</p>
-      <p className="cobro-total">${total.toLocaleString('es-CO')}</p>
+      <div className="cobro-focus">
+        {contexto ? <p className="muted">{contexto}</p> : null}
 
-      <Input
-        label="Monto recibido"
-        inputMode="numeric"
-        value={montoRecibido}
-        onChange={(event) => setMontoRecibido(event.target.value)}
-        placeholder="0"
-      />
+        <p className="muted">Total a cobrar</p>
+        <p className="cobro-total">${total.toLocaleString('es-CO')}</p>
 
-      <p className="muted vuelto-label">Vuelto</p>
-      <div className="vuelto-box">
-        <strong>{resumenVuelto}</strong>
+        <Input
+          label="Monto recibido"
+          inputMode="numeric"
+          value={esTransferencia ? String(total) : montoRecibido}
+          onChange={(event) => setMontoRecibido(event.target.value)}
+          placeholder="0"
+          disabled={esTransferencia}
+          readOnly={esTransferencia}
+        />
+
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={esTransferencia}
+            onChange={(event) => setTransferencia(event.target.checked)}
+          />
+          <span className="check-box" aria-hidden />
+          <span>Transferencia</span>
+        </label>
+
+        <p className="muted vuelto-label">Vuelto</p>
+        <div className="vuelto-box">
+          <strong>{resumenVuelto}</strong>
+        </div>
+
+        <Button disabled={!puedeConfirmar} onClick={() => void confirmarPago()}>
+          {phase.status === 'submitting' ? 'Confirmando…' : 'Confirmar pago'}
+        </Button>
       </div>
-
-      {phase.status === 'error' ? <p className="error">{phase.message}</p> : null}
-
-      <Button disabled={!puedeConfirmar} onClick={() => void confirmarPago()}>
-        {phase.status === 'submitting' ? 'Confirmando…' : 'Confirmar pago'}
-      </Button>
     </main>
   );
 }

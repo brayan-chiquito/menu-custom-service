@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { AlertError } from '../../shared/components/AlertError';
 import { Button } from '../../shared/components/Button';
 import { Input } from '../../shared/components/Input';
 import { usePedidoActual } from './usePedidoActual';
@@ -7,14 +8,19 @@ export function PedidoActual() {
   const {
     items,
     nombreCliente,
+    indicacionesActivas,
+    indicaciones,
     total,
     setCantidad,
     setNombreCliente,
+    setIndicacionesActivas,
+    setIndicaciones,
     lineTotal,
     vacio,
     guardarSinPagar,
     guardando,
-    errorGuardar,
+    errorAlert,
+    clearErrorAlert,
   } = usePedidoActual();
 
   if (vacio) {
@@ -44,6 +50,14 @@ export function PedidoActual() {
           ← Menú
         </Link>
       </header>
+
+      {errorAlert ? (
+        <AlertError
+          title={errorAlert.title}
+          message={errorAlert.message}
+          onClose={clearErrorAlert}
+        />
+      ) : null}
 
       <section className="stack">
         {items.map((item) => (
@@ -91,6 +105,32 @@ export function PedidoActual() {
           value={nombreCliente}
           onChange={(event) => setNombreCliente(event.target.value)}
         />
+
+        <label className="check-row check-row-start">
+          <input
+            type="checkbox"
+            checked={indicacionesActivas}
+            onChange={(e) => setIndicacionesActivas(e.target.checked)}
+          />
+          <span className="check-box" aria-hidden />
+          <span>Indicaciones especiales</span>
+        </label>
+        <p className="muted">
+          Actívalo si el cliente pide algo especial (ej. sin un ingrediente). Se envía en el
+          WhatsApp del pedido.
+        </p>
+        {indicacionesActivas ? (
+          <label className="field">
+            <span className="field-label">Indicaciones</span>
+            <textarea
+              className="field-input field-textarea"
+              rows={3}
+              value={indicaciones}
+              onChange={(e) => setIndicaciones(e.target.value)}
+              placeholder="Ej. Sin chicharrón, agregar maíz…"
+            />
+          </label>
+        ) : null}
       </section>
 
       <footer className="page-footer">
@@ -98,7 +138,6 @@ export function PedidoActual() {
           <span>Total</span>
           <strong>${total.toLocaleString('es-CO')}</strong>
         </div>
-        {errorGuardar ? <p className="error">{errorGuardar}</p> : null}
         <Link to="/cobro">
           <Button disabled={guardando}>Ir a cobrar</Button>
         </Link>

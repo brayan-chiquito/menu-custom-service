@@ -44,4 +44,14 @@ describe('pedidoStore', () => {
     expect(usePedidoStore.getState().items[0].proteina_id).toBeNull();
     expect(usePedidoStore.getState().items[0].salsa_ids).toEqual([1, 4]);
   });
+
+  it('should clear indicaciones when checkbox turns off', () => {
+    const store = usePedidoStore.getState();
+    store.setIndicacionesActivas(true);
+    store.setIndicaciones('Sin chicharrón');
+    expect(usePedidoStore.getState().indicaciones).toBe('Sin chicharrón');
+    usePedidoStore.getState().setIndicacionesActivas(false);
+    expect(usePedidoStore.getState().indicacionesActivas).toBe(false);
+    expect(usePedidoStore.getState().indicaciones).toBe('');
+  });
 });

@@ -1,0 +1,27 @@
+meta {
+  name: Crear topping
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/catalogo/adiciones
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "nombre": "Extra queso Bruno",
+    "precio": 2500
+  }
+}
+
+assert {
+  res.status: eq 201
+}
+
+docs {
+  ## POST /catalogo/adiciones
+  Crea topping (adición) global.
+}

@@ -25,10 +25,16 @@ npm test
 |------|---------|
 | `/` | Menú + modal (platos: base obligatoria, salsas opcionales; bebidas: agregar directo) |
 | `/resumen` | Pedido actual (+ Guardar sin pagar) |
-| `/cobro` | Pago desde carrito + WhatsApp / Copiar pedido |
+| `/cobro` | Pago desde carrito (+ checkbox Transferencia) + WhatsApp / Copiar pedido |
 | `/cobro/:pedidoId` | Cobrar un pedido ya guardado (pendiente) |
-| `/historial` | Pedidos del día (+ Detalles modal, Cobrar, Balance) |
-| `/balance` | Cobrado Hoy/Semana/Mes |
+| `/historial` | Todos los días (+ Cargar más, badges, Detalles, Eliminados/Restaurar, Balance) |
+| `/historial/:id/editar` | Editar nombre, ítems e indicaciones (pendiente o pagado) |
+| `/balance` | Ventas, efectivo/transfer, gastos, ganancia (Hoy/Semana/Mes) |
+| `/egresos` | Registrar gasto (nombre, precio, cantidad) + lista del periodo |
+| `/ajustes` | Hub catálogo: Productos, Toppings, Bases, Salsas, Proteínas |
+| `/ajustes/productos` | CRUD productos (`requiere_proteina` opcional por plato) |
+| `/ajustes/toppings` | CRUD toppings (nombre, precio) |
+| `/ajustes/bases` · `/salsas` · `/proteinas` | CRUD por nombre |
 
 ## Pedidos pendientes
 
@@ -74,3 +80,27 @@ Historial → **Balance** → `/balance` con chips Hoy/Semana/Mes.
 ### Task 15 — Limonada maracuyá + salsas opcionales
 Bebida `$3000`; modal/API permiten platos sin salsa.
 Tests: `agregarProducto.rules.test.ts`, `pedidos.test.ts`.
+
+### Task 17 — Historial paginado + medio de pago + Bogotá
+Lista completa con **Cargar más** (10); badges Efectivo/Transfer.
+Fechas en America/Bogotá. Tests: `historial.meta.test.ts`.
+
+### Task 18 — Ajustes CRUD catálogo
+Menú **⚙** → `/ajustes`. CRUD de productos (con toggle **Requiere proteína**),
+toppings, bases, salsas y proteínas. API `/catalogo/*`.
+Tests: `productoForm.rules.test.ts` (+ backend `catalogo-crud.test.ts`).
+
+### Task 19 — Editar / eliminar en historial
+Detalles → **Editar** / **Eliminar** (confirmación). Soft-delete.
+Editar ítems también en pagados. Tests: `historial.edit.test.ts`.
+
+### Task 20 — Indicaciones + Eliminados/Restaurar
+Resumen/Editar: checkbox **Indicaciones especiales** (off) → textarea; van al WhatsApp.
+Historial: filtro **Eliminados** + **Restaurar**. Tests: `historial.filters.test.ts`, `pedidoStore.test.ts`.
+
+### Task 21 — Exportar balance Excel
+Balance: botón **Exportar Excel** al pie; descarga `.xlsx` del periodo (Hoy/Semana/Mes).
+
+### Task 22 — Alertas de error (RF-21)
+Alerta visible arriba ante fallos de red/API (crear, cobrar, guardar, etc.). Sin toasts de éxito.
+Tests: `mensajeErrorUsuario.test.ts`.

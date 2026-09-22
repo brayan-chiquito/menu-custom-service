@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import Database from 'better-sqlite3';
 
 const DEFAULT_DB_PATH = path.join(process.cwd(), 'data', 'menu.db');
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 7;
 
 export type AppDatabase = Database.Database;
 
@@ -13,7 +13,6 @@ export function createDatabase(dbPath: string = process.env.DATABASE_PATH ?? DEF
   }
 
   const db = new Database(dbPath);
-  // DELETE evita SQLITE_IOERR_SHMOPEN en volúmenes Docker (Windows).
   const journalMode = (process.env.SQLITE_JOURNAL_MODE ?? 'DELETE').toUpperCase();
   db.pragma(`journal_mode = ${journalMode}`);
   db.pragma('foreign_keys = ON');
@@ -33,13 +32,13 @@ export function migrate(db: AppDatabase): void {
   };
   const currentVersion = row.version ?? 0;
 
-  // v1–v3: recrear esquema (entornos viejos / tests). No usar en prod con datos.
   if (currentVersion > 0 && currentVersion < 3) {
     db.exec(`
       DROP TABLE IF EXISTS pedido_item_adiciones;
       DROP TABLE IF EXISTS pedido_item_salsas;
       DROP TABLE IF EXISTS pedido_items;
       DROP TABLE IF EXISTS pedidos;
+      DROP TABLE IF EXISTS egresos;
       DROP TABLE IF EXISTS adiciones;
       DROP TABLE IF EXISTS proteinas;
       DROP TABLE IF EXISTS salsas;
@@ -50,10 +49,20 @@ export function migrate(db: AppDatabase): void {
 
   ensureBaseSchema(db);
 
-  // v3 → v4: base_id nullable (bebidas) sin borrar pedidos.
   if (currentVersion === 3) {
     migrateV3ToV4NullableBase(db);
   }
+
+  if (currentVersion > 0 && currentVersion < 5) {
+    migrateV4ToV5EgresosYTransferencia(db);
+  }
+
+  if (currentVersion > 0 && currentVersion < 6) {
+    migrateV5ToV6SoftDeletePedidos(db);
+  }
+
+  // Siempre (idempotente): corrige DBs que marcaron v7 sin la columna.
+  migrateV6ToV7Indicaciones(db);
 
   if (currentVersion < SCHEMA_VERSION) {
     db.prepare(`INSERT INTO schema_migrations (version) VALUES (?)`).run(SCHEMA_VERSION);
@@ -101,6 +110,9 @@ function ensureBaseSchema(db: AppDatabase): void {
       monto_pagado REAL NULL,
       vuelto REAL NULL,
       estado TEXT NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'pagado')),
+      es_transferencia INTEGER NOT NULL DEFAULT 0 CHECK (es_transferencia IN (0, 1)),
+      eliminado_at TEXT NULL,
+      indicaciones TEXT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -126,10 +138,18 @@ function ensureBaseSchema(db: AppDatabase): void {
       adicion_id INTEGER NOT NULL REFERENCES adiciones(id),
       precio_momento REAL NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS egresos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nombre TEXT NOT NULL,
+      precio REAL NOT NULL CHECK (precio >= 0),
+      cantidad REAL NOT NULL CHECK (cantidad > 0),
+      total REAL NOT NULL CHECK (total >= 0),
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 }
 
-/** Copia pedido_items a una tabla con base_id NULL; conserva pedidos e ítems. */
 function migrateV3ToV4NullableBase(db: AppDatabase): void {
   const table = db
     .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'pedido_items'`)
@@ -139,7 +159,6 @@ function migrateV3ToV4NullableBase(db: AppDatabase): void {
     return;
   }
 
-  // Si ya es nullable (DB creada en v4), no tocar.
   const cols = db.prepare(`PRAGMA table_info(pedido_items)`).all() as Array<{
     name: string;
     notnull: number;
@@ -174,4 +193,41 @@ function migrateV3ToV4NullableBase(db: AppDatabase): void {
   });
   txn();
   db.pragma('foreign_keys = ON');
+}
+
+/** Egresos + es_transferencia en pedidos; idempotente; no borra datos. */
+function migrateV4ToV5EgresosYTransferencia(db: AppDatabase): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS egresos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nombre TEXT NOT NULL,
+      precio REAL NOT NULL CHECK (precio >= 0),
+      cantidad REAL NOT NULL CHECK (cantidad > 0),
+      total REAL NOT NULL CHECK (total >= 0),
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  const cols = db.prepare(`PRAGMA table_info(pedidos)`).all() as Array<{ name: string }>;
+  if (!cols.some((c) => c.name === 'es_transferencia')) {
+    db.exec(
+      `ALTER TABLE pedidos ADD COLUMN es_transferencia INTEGER NOT NULL DEFAULT 0 CHECK (es_transferencia IN (0, 1))`,
+    );
+  }
+}
+
+/** Soft-delete de pedidos; idempotente; no borra filas. */
+function migrateV5ToV6SoftDeletePedidos(db: AppDatabase): void {
+  const cols = db.prepare(`PRAGMA table_info(pedidos)`).all() as Array<{ name: string }>;
+  if (!cols.some((c) => c.name === 'eliminado_at')) {
+    db.exec(`ALTER TABLE pedidos ADD COLUMN eliminado_at TEXT NULL`);
+  }
+}
+
+/** Indicaciones especiales opcionales; idempotente. */
+function migrateV6ToV7Indicaciones(db: AppDatabase): void {
+  const cols = db.prepare(`PRAGMA table_info(pedidos)`).all() as Array<{ name: string }>;
+  if (!cols.some((c) => c.name === 'indicaciones')) {
+    db.exec(`ALTER TABLE pedidos ADD COLUMN indicaciones TEXT NULL`);
+  }
 }

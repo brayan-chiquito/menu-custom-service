@@ -65,22 +65,29 @@ export type PedidoCreado = {
   monto_pagado: number | null;
   vuelto: number | null;
   estado: 'pendiente' | 'pagado';
+  es_transferencia: boolean;
+  indicaciones: string | null;
   created_at: string;
 };
 
 export type PedidoDetalleLinea = {
   cantidad: number;
+  producto_id: number;
   producto_nombre: string;
+  base_id: number | null;
   base_nombre: string | null;
+  salsa_ids: number[];
   salsa_nombres: string[];
+  proteina_id: number | null;
   proteina_nombre: string | null;
-  adiciones: Array<{ nombre: string; precio_momento: number }>;
+  adiciones: Array<{ adicion_id: number; nombre: string; precio_momento: number }>;
   precio_unit_momento: number;
   subtotal: number;
 };
 
 export type PedidoDetalle = PedidoCreado & {
   lineas: PedidoDetalleLinea[];
+  eliminado_at?: string | null;
 };
 
 export type ConfirmarPedidoResponse = PedidoCreado & {
@@ -97,7 +104,18 @@ export type PedidoResumen = {
   monto_pagado: number | null;
   vuelto: number | null;
   estado: 'pendiente' | 'pagado';
+  es_transferencia: boolean;
+  indicaciones: string | null;
+  eliminado_at?: string | null;
   created_at: string;
+};
+
+export type ListaPedidosResponse = {
+  items: PedidoResumen[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
 };
 
 export type PeriodoBalance = 'hoy' | 'semana' | 'mes';
@@ -107,8 +125,23 @@ export type BalanceVentas = {
   desde: string;
   hasta: string;
   cobrado: number;
+  cobrado_efectivo: number;
+  cobrado_transferencia: number;
   pedidos_pagados: number;
+  pedidos_efectivo: number;
+  pedidos_transferencia: number;
   ticket_promedio: number;
   pendiente: number;
   pedidos_pendientes: number;
+  gastos: number;
+  ganancia: number;
+};
+
+export type Egreso = {
+  id: number;
+  nombre: string;
+  precio: number;
+  cantidad: number;
+  total: number;
+  created_at: string;
 };
