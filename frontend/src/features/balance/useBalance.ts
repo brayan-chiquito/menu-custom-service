@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { fetchBalance } from '../../shared/api/pedidosApi';
+import { downloadBalanceExport, fetchBalance } from '../../shared/api/pedidosApi';
 import type { BalanceVentas, PeriodoBalance } from '../../shared/api/types';
+import {
+  mensajeErrorUsuario,
+  type ErrorAlertContent,
+} from '../../shared/errors/mensajeErrorUsuario';
+import { esBalanceVacio, nombreArchivoBalanceExport } from './balance.format';
 
 type BalanceState =
   | { status: 'loading' }
@@ -19,8 +24,13 @@ export function useBalance() {
   const [searchParams, setSearchParams] = useSearchParams();
   const periodo = parsePeriodo(searchParams.get('periodo'));
   const [state, setState] = useState<BalanceState>({ status: 'loading' });
+  const [exportando, setExportando] = useState(false);
+  const [actionAlert, setActionAlert] = useState<ErrorAlertContent | null>(null);
+  const [loadAlertDismissed, setLoadAlertDismissed] = useState(false);
 
   function setPeriodo(next: PeriodoBalance) {
+    setLoadAlertDismissed(false);
+    setActionAlert(null);
     if (next === 'hoy') {
       setSearchParams({});
     } else {
@@ -31,6 +41,7 @@ export function useBalance() {
   useEffect(() => {
     let cancelled = false;
     setState({ status: 'loading' });
+    setActionAlert(null);
     fetchBalance(periodo)
       .then((balance) => {
         if (!cancelled) {
@@ -39,10 +50,8 @@ export function useBalance() {
       })
       .catch((error: unknown) => {
         if (!cancelled) {
-          setState({
-            status: 'error',
-            message: error instanceof Error ? error.message : 'No se pudo cargar el balance',
-          });
+          const alert = mensajeErrorUsuario(error, 'No se pudo cargar el balance');
+          setState({ status: 'error', message: alert.message });
         }
       });
     return () => {
@@ -54,9 +63,34 @@ export function useBalance() {
     if (state.status !== 'ok') {
       return false;
     }
-    const b = state.balance;
-    return b.pedidos_pagados === 0 && b.pedidos_pendientes === 0;
+    return esBalanceVacio(state.balance);
   }, [state]);
 
-  return { state, periodo, setPeriodo, vacio };
+  async function exportarExcel() {
+    if (state.status !== 'ok') {
+      return;
+    }
+    setExportando(true);
+    setActionAlert(null);
+    try {
+      await downloadBalanceExport(periodo, nombreArchivoBalanceExport(state.balance));
+    } catch (error: unknown) {
+      setActionAlert(mensajeErrorUsuario(error, 'No se pudo exportar el balance'));
+    } finally {
+      setExportando(false);
+    }
+  }
+
+  return {
+    state,
+    periodo,
+    setPeriodo,
+    vacio,
+    exportarExcel,
+    exportando,
+    actionAlert,
+    clearActionAlert: () => setActionAlert(null),
+    loadAlertDismissed,
+    dismissLoadAlert: () => setLoadAlertDismissed(true),
+  };
 }

@@ -1,27 +1,40 @@
 import { AppError } from '../../shared/errors.js';
+import { emitCocinaRefresh } from '../../shared/cocina-events.js';
+import type { AppDatabase } from '../../shared/db.js';
 import type { Notificador } from '../notificaciones/notificador.interface.js';
 import { formatearMensajePedido } from '../notificaciones/notificador.interface.js';
+import { registrarAuditoria } from '../auditoria/auditoria.helper.js';
 import { calcularTicketPromedio, resolverRangoPeriodo } from './pedidos.balance.js';
+import { buildBalanceWorkbook, type BalanceExportResult } from './balance.export.js';
+import type { Egreso } from '../egresos/egresos.types.js';
 import { PedidosRepository } from './pedidos.repository.js';
 import type {
+  ActualizarPedidoInput,
   BalanceVentas,
   ConfirmarPedidoResponse,
   CrearPedidoInput,
+  ListaPedidosResponse,
   Pedido,
   PedidoACrear,
   PedidoDetalle,
+  PedidoEstado,
   PedidoItemACrear,
   PedidoResumen,
   PeriodoBalance,
   RegistrarPagoInput,
 } from './pedidos.types.js';
 
+const DEFAULT_LIMIT = 10;
+const MAX_LIMIT = 50;
+
 export class PedidosService {
   constructor(
     private readonly repository: PedidosRepository,
     private readonly notificador: Notificador,
+    private readonly db: AppDatabase,
   ) {}
 
+  /** Compat: pedidos del día calendario Bogotá. */
   listarPorFecha(fecha: string | undefined): PedidoResumen[] {
     if (fecha !== 'hoy') {
       throw new AppError('Parámetro fecha inválido; use fecha=hoy', 400);
@@ -30,7 +43,65 @@ export class PedidosService {
     return this.repository.findByFechaHoy();
   }
 
-  obtenerBalance(periodoRaw: string | undefined): BalanceVentas {
+  listarPaginado(input: {
+    limitRaw: string | undefined;
+    offsetRaw: string | undefined;
+    estadoRaw: string | undefined;
+    eliminadosRaw: string | undefined;
+  }): ListaPedidosResponse {
+    const limit = this.parseLimit(input.limitRaw);
+    const offset = this.parseOffset(input.offsetRaw);
+    const soloEliminados = input.eliminadosRaw === '1' || input.eliminadosRaw === 'true';
+    const estado = soloEliminados ? undefined : this.parseEstado(input.estadoRaw);
+
+    const { items, total } = this.repository.findPaginados({
+      limit,
+      offset,
+      estado,
+      soloEliminados,
+    });
+    return {
+      items,
+      total,
+      limit,
+      offset,
+      has_more: offset + items.length < total,
+    };
+  }
+
+  private parseLimit(raw: string | undefined): number {
+    if (raw === undefined || raw === '') {
+      return DEFAULT_LIMIT;
+    }
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 1) {
+      throw new AppError('limit debe ser un entero ≥ 1', 400);
+    }
+    return Math.min(n, MAX_LIMIT);
+  }
+
+  private parseOffset(raw: string | undefined): number {
+    if (raw === undefined || raw === '') {
+      return 0;
+    }
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 0) {
+      throw new AppError('offset debe ser un entero ≥ 0', 400);
+    }
+    return n;
+  }
+
+  private parseEstado(raw: string | undefined): PedidoEstado | undefined {
+    if (raw === undefined || raw === '' || raw === 'todos') {
+      return undefined;
+    }
+    if (raw !== 'pendiente' && raw !== 'pagado') {
+      throw new AppError('estado inválido; use pendiente|pagado', 400);
+    }
+    return raw;
+  }
+
+  obtenerBalance(periodoRaw: string | undefined, gastosDelPeriodo = 0): BalanceVentas {
     if (periodoRaw !== 'hoy' && periodoRaw !== 'semana' && periodoRaw !== 'mes') {
       throw new AppError('Parámetro periodo inválido; use hoy|semana|mes', 400);
     }
@@ -38,17 +109,34 @@ export class PedidosService {
     const periodo = periodoRaw as PeriodoBalance;
     const { desde, hasta } = resolverRangoPeriodo(periodo);
     const agg = this.repository.findBalanceEntreFechas(desde, hasta);
+    const gastos = gastosDelPeriodo;
 
     return {
       periodo,
       desde,
       hasta,
       cobrado: agg.cobrado,
+      cobrado_efectivo: agg.cobrado_efectivo,
+      cobrado_transferencia: agg.cobrado_transferencia,
       pedidos_pagados: agg.pedidos_pagados,
+      pedidos_efectivo: agg.pedidos_efectivo,
+      pedidos_transferencia: agg.pedidos_transferencia,
       ticket_promedio: calcularTicketPromedio(agg.cobrado, agg.pedidos_pagados),
       pendiente: agg.pendiente,
       pedidos_pendientes: agg.pedidos_pendientes,
+      gastos,
+      ganancia: agg.cobrado - gastos,
     };
+  }
+
+  async exportarBalance(
+    periodoRaw: string | undefined,
+    gastosDelPeriodo: number,
+    egresos: Egreso[],
+  ): Promise<BalanceExportResult> {
+    const balance = this.obtenerBalance(periodoRaw, gastosDelPeriodo);
+    const pedidos = this.repository.findActivosEntreFechas(balance.desde, balance.hasta);
+    return buildBalanceWorkbook({ balance, pedidos, egresos });
   }
 
   obtenerPorId(id: number): PedidoDetalle {
@@ -64,14 +152,155 @@ export class PedidosService {
     return detalle;
   }
 
-  crear(input: CrearPedidoInput): Pedido {
+  crear(input: CrearPedidoInput, actorId?: number): Pedido {
     if (!Array.isArray(input.items) || input.items.length === 0) {
       throw new AppError('El pedido debe incluir al menos un item', 400);
     }
 
+    const itemsPreparados = this.prepararItems(input.items);
+    const total = calcularTotal(itemsPreparados);
+    const pedidoACrear: PedidoACrear = {
+      nombre_cliente: normalizarNombreCliente(input.nombre_cliente),
+      total,
+      indicaciones: normalizarIndicaciones(input.indicaciones),
+      items: itemsPreparados,
+      creado_por: actorId ?? null,
+    };
+
+    const creado = this.repository.create(pedidoACrear);
+    registrarAuditoria(this.db, {
+      usuarioId: actorId,
+      accion: 'crear',
+      entidad: 'pedido',
+      entidadId: creado.id,
+    });
+    emitCocinaRefresh();
+    return creado;
+  }
+
+  actualizar(id: number, input: ActualizarPedidoInput, actorId?: number): PedidoDetalle {
+    const pedido = this.obtenerPedidoOFallar(id);
+
+    if (input.updated_at !== undefined && input.updated_at !== null) {
+      if (typeof input.updated_at !== 'string' || input.updated_at !== pedido.updated_at) {
+        throw new AppError(
+          'Otro usuario actualizó este pedido. Recarga e intenta de nuevo.',
+          409,
+        );
+      }
+    }
+
+    const cambiaItems = Array.isArray(input.items);
+    const cambiaNombre = input.nombre_cliente !== undefined;
+    const cambiaIndicaciones = input.indicaciones !== undefined;
+
+    if (!cambiaItems && !cambiaNombre && !cambiaIndicaciones) {
+      throw new AppError('Nada que actualizar: envíe nombre_cliente, indicaciones y/o items', 400);
+    }
+
+    if (cambiaItems && (!input.items || input.items.length === 0)) {
+      throw new AppError('El pedido debe incluir al menos un item', 400);
+    }
+
+    const nombre = cambiaNombre
+      ? normalizarNombreCliente(input.nombre_cliente)
+      : pedido.nombre_cliente;
+    const indicaciones = cambiaIndicaciones
+      ? normalizarIndicaciones(input.indicaciones)
+      : pedido.indicaciones;
+
+    let total = pedido.total;
+    let itemsPreparados: PedidoItemACrear[] | undefined;
+    let montoPagado = pedido.monto_pagado;
+    let vuelto = pedido.vuelto;
+
+    if (cambiaItems) {
+      itemsPreparados = this.prepararItems(input.items!);
+      total = calcularTotal(itemsPreparados);
+      const pago = ajustarPagoTrasEditar({
+        estado: pedido.estado,
+        es_transferencia: pedido.es_transferencia,
+        monto_pagado: pedido.monto_pagado,
+        totalAnterior: pedido.total,
+        totalNuevo: total,
+      });
+      montoPagado = pago.monto_pagado;
+      vuelto = pago.vuelto;
+    }
+
+    this.repository.actualizarPedido(id, {
+      nombre_cliente: nombre,
+      total,
+      monto_pagado: montoPagado,
+      vuelto,
+      indicaciones,
+      items: itemsPreparados,
+    });
+
+    registrarAuditoria(this.db, {
+      usuarioId: actorId,
+      accion: 'actualizar',
+      entidad: 'pedido',
+      entidadId: id,
+    });
+    emitCocinaRefresh();
+    return this.obtenerPorId(id);
+  }
+
+  eliminar(id: number, actorId?: number): void {
+    this.obtenerPedidoOFallar(id);
+    const ok = this.repository.softDelete(id);
+    if (!ok) {
+      throw new AppError(`Pedido ${id} no encontrado`, 404);
+    }
+    registrarAuditoria(this.db, {
+      usuarioId: actorId,
+      accion: 'eliminar',
+      entidad: 'pedido',
+      entidadId: id,
+    });
+    emitCocinaRefresh();
+  }
+
+  restaurar(id: number, actorId?: number): PedidoDetalle {
+    if (!Number.isInteger(id) || id <= 0) {
+      throw new AppError('id de pedido inválido', 400);
+    }
+    const ok = this.repository.restaurar(id);
+    if (!ok) {
+      throw new AppError(`Pedido ${id} no está eliminado o no existe`, 404);
+    }
+    registrarAuditoria(this.db, {
+      usuarioId: actorId,
+      accion: 'restaurar',
+      entidad: 'pedido',
+      entidadId: id,
+    });
+    emitCocinaRefresh();
+    return this.obtenerPorId(id);
+  }
+
+  preparar(id: number, actorId?: number): PedidoDetalle {
+    this.obtenerPedidoOFallar(id);
+    const actualizado = this.repository.marcarPreparado(id, actorId ?? null);
+    if (!actualizado) {
+      throw new AppError(`Pedido ${id} no encontrado o ya está preparado`, 404);
+    }
+    registrarAuditoria(this.db, {
+      usuarioId: actorId,
+      accion: 'preparar',
+      entidad: 'pedido',
+      entidadId: id,
+    });
+    emitCocinaRefresh();
+    return this.obtenerPorId(id);
+  }
+
+  /** Valida y resuelve catálogo → líneas con precios de momento. */
+  private prepararItems(items: CrearPedidoInput['items']): PedidoItemACrear[] {
     const itemsPreparados: PedidoItemACrear[] = [];
 
-    for (const item of input.items) {
+    for (const item of items) {
       if (!Number.isInteger(item.cantidad) || item.cantidad <= 0) {
         throw new AppError('Cada item debe tener una cantidad entera mayor a 0', 400);
       }
@@ -185,17 +414,10 @@ export class PedidosService {
       });
     }
 
-    const total = calcularTotal(itemsPreparados);
-    const pedidoACrear: PedidoACrear = {
-      nombre_cliente: normalizarNombreCliente(input.nombre_cliente),
-      total,
-      items: itemsPreparados,
-    };
-
-    return this.repository.create(pedidoACrear);
+    return itemsPreparados;
   }
 
-  registrarPago(id: number, input: RegistrarPagoInput): Pedido {
+  registrarPago(id: number, input: RegistrarPagoInput, actorId?: number): Pedido {
     const pedido = this.obtenerPedidoOFallar(id);
 
     if (pedido.estado !== 'pendiente') {
@@ -212,10 +434,24 @@ export class PedidosService {
     }
 
     const vuelto = input.monto_pagado - pedido.total;
-    return this.repository.registrarPago(id, input.monto_pagado, vuelto);
+    const esTransferencia = input.es_transferencia === true;
+    const actualizado = this.repository.registrarPago(
+      id,
+      input.monto_pagado,
+      vuelto,
+      esTransferencia,
+    );
+    registrarAuditoria(this.db, {
+      usuarioId: actorId,
+      accion: 'cobrar',
+      entidad: 'pedido',
+      entidadId: id,
+    });
+    emitCocinaRefresh();
+    return actualizado;
   }
 
-  async confirmar(id: number): Promise<ConfirmarPedidoResponse> {
+  async confirmar(id: number, actorId?: number): Promise<ConfirmarPedidoResponse> {
     const pedido = this.obtenerPedidoOFallar(id);
 
     if (pedido.estado === 'pagado') {
@@ -238,6 +474,7 @@ export class PedidosService {
       monto_pagado: pagado.monto_pagado,
       vuelto: pagado.vuelto,
       estado: pagado.estado,
+      indicaciones: pagado.indicaciones,
       items:
         detalle?.lineas.map((linea) => ({
           producto_nombre: linea.producto_nombre,
@@ -251,22 +488,19 @@ export class PedidosService {
 
     const mensaje = formatearMensajePedido(pedidoDto);
 
-    let enviada = false;
-    try {
-      const resultado = await this.notificador.enviar(pedidoDto);
-      enviada = resultado.enviada;
-    } catch (error: unknown) {
-      console.error(
-        `[Notificador] Falló el envío del pedido #${pagado.id}; el pedido permanece pagado`,
-        error,
-      );
-      enviada = false;
-    }
+    registrarAuditoria(this.db, {
+      usuarioId: actorId,
+      accion: 'confirmar',
+      entidad: 'pedido',
+      entidadId: id,
+    });
+    emitCocinaRefresh();
 
     return {
       ...pagado,
       notificacion: {
-        enviada,
+        // WhatsApp operativo retirado: cocina cubre el aviso al preparador.
+        enviada: false,
         mensaje,
       },
     };
@@ -293,6 +527,14 @@ export function normalizarNombreCliente(nombre: string | null | undefined): stri
   return nombre.trim();
 }
 
+export function normalizarIndicaciones(texto: string | null | undefined): string | null {
+  if (typeof texto !== 'string') {
+    return null;
+  }
+  const t = texto.trim();
+  return t === '' ? null : t;
+}
+
 export function calcularTotal(items: PedidoItemACrear[]): number {
   return items.reduce((acumulado, item) => {
     const adicionesPorUnidad = item.adiciones.reduce(
@@ -302,4 +544,27 @@ export function calcularTotal(items: PedidoItemACrear[]): number {
     const precioPorUnidad = item.precio_unit_momento + adicionesPorUnidad;
     return acumulado + precioPorUnidad * item.cantidad;
   }, 0);
+}
+
+/** Ajusta monto/vuelto al cambiar el total de un pedido (pagado o pendiente). */
+export function ajustarPagoTrasEditar(input: {
+  estado: PedidoEstado;
+  es_transferencia: boolean;
+  monto_pagado: number | null;
+  totalAnterior: number;
+  totalNuevo: number;
+}): { monto_pagado: number | null; vuelto: number | null } {
+  if (input.estado !== 'pagado') {
+    return { monto_pagado: null, vuelto: null };
+  }
+
+  if (input.es_transferencia) {
+    return { monto_pagado: input.totalNuevo, vuelto: 0 };
+  }
+
+  const monto = input.monto_pagado ?? input.totalAnterior;
+  if (monto < input.totalNuevo) {
+    return { monto_pagado: input.totalNuevo, vuelto: 0 };
+  }
+  return { monto_pagado: monto, vuelto: monto - input.totalNuevo };
 }

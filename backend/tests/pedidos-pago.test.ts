@@ -93,21 +93,21 @@ describe('PATCH pago y confirmar', () => {
     expect(response.body).toMatchObject({ error: 'Monto insuficiente', faltante: 5000 });
   });
 
-  it('should confirm with notificacion.enviada true and mensaje', async () => {
+  it('should confirm pagado with copyable mensaje (sin envío WhatsApp)', async () => {
     const app = createApp(db, notificador);
     await request(app).patch(`/pedidos/${pedidoId}/pago`).send({ monto_pagado: 10000 });
 
     const ok = await request(app).patch(`/pedidos/${pedidoId}/confirmar`);
     expect(ok.status).toBe(200);
     expect(ok.body.estado).toBe('pagado');
-    expect(ok.body.notificacion.enviada).toBe(true);
+    expect(ok.body.notificacion.enviada).toBe(false);
     expect(ok.body.notificacion.mensaje).toContain('Quesudo');
     expect(ok.body.notificacion.mensaje).toContain('base: Verde');
     expect(ok.body.notificacion.mensaje).toContain('Cliente: Ana');
-    expect(notificador.enviados).toHaveLength(1);
+    expect(notificador.enviados).toHaveLength(0);
   });
 
-  it('should keep pagado and return enviada false when notifier fails', async () => {
+  it('should keep pagado even if a notifier would fail (ya no se invoca)', async () => {
     const app = createApp(db, notificador);
     await request(app).patch(`/pedidos/${pedidoId}/pago`).send({ monto_pagado: 10000 });
     notificador.failNext = true;
@@ -121,7 +121,7 @@ describe('PATCH pago y confirmar', () => {
     expect(response.body.notificacion.mensaje).toContain('Quesudo');
   });
 
-  it('should return enviada false when notifier soft-fails', async () => {
+  it('should return mensaje de pedido al confirmar', async () => {
     const soft = new FailSoftNotificador();
     const app = createApp(db, soft);
     await request(app).patch(`/pedidos/${pedidoId}/pago`).send({ monto_pagado: 10000 });
@@ -172,6 +172,6 @@ describe('PATCH pago y confirmar', () => {
     expect(confirmado.status).toBe(200);
     expect(confirmado.body.estado).toBe('pagado');
     expect(confirmado.body.vuelto).toBe(2000);
-    expect(notificador.enviados).toHaveLength(1);
+    expect(notificador.enviados).toHaveLength(0);
   });
 });

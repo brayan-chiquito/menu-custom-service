@@ -4,18 +4,16 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      # Pedidos SQLite (sobreviven reinicios)
+      # Pedidos, usuarios y menú (sobreviven reinicios)
       - ./backend/data:/app/data
-      # Sesión WhatsApp (QR solo la primera vez)
-      - ./backend/wwebjs-session:/app/.wwebjs_auth
     environment:
       - PORT=3000
       - DATABASE_PATH=/app/data/menu.db
-      - WHATSAPP_TARGET_NUMBER=${WHATSAPP_TARGET_NUMBER}
-      - WWEBJS_AUTH_PATH=/app/.wwebjs_auth
-      - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
-    # Chromium/WhatsApp necesita más /dev/shm
-    shm_size: "1gb"
+      - REQUIRE_AUTH=1
+      - COOKIE_SECURE=${COOKIE_SECURE:-0}
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
+      - SESSION_TTL_HOURS=${SESSION_TTL_HOURS:-24}
+      - ENFORCE_PROD_CONFIG=${ENFORCE_PROD_CONFIG:-0}
     # Al abrir Docker Desktop, este contenedor vuelve solo
     restart: unless-stopped
 
@@ -23,7 +21,7 @@ services:
     build:
       context: ./frontend
       args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:3000}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
     ports:
       - "5173:80"
     depends_on:

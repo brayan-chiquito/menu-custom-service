@@ -1,0 +1,31 @@
+meta {
+  name: Crear producto
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/catalogo/productos
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "nombre": "Especial Bruno",
+    "descripcion": "Prueba CRUD",
+    "precio": 15000,
+    "categoria": "platos",
+    "disponible": true,
+    "requiere_proteina": true
+  }
+}
+
+assert {
+  res.status: eq 201
+}
+
+docs {
+  ## POST /catalogo/productos
+  Crea producto. Bebidas fuerzan `requiere_proteina: false`.
+}

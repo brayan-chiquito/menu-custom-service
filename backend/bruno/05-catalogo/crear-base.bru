@@ -1,0 +1,26 @@
+meta {
+  name: Crear base
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/catalogo/bases
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "nombre": "Base Bruno"
+  }
+}
+
+assert {
+  res.status: eq 201
+}
+
+docs {
+  ## POST /catalogo/bases
+  Mismo patrón para `/catalogo/salsas` y `/catalogo/proteinas`.
+}

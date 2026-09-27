@@ -1,0 +1,20 @@
+meta {
+  name: Revocar sesiones
+  type: http
+  seq: 2
+}
+
+delete {
+  url: {{baseUrl}}/usuarios/2/sesiones
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Solo admin. Cierra todas las sesiones del usuario. 200 { "revocadas": N }.
+  Cambiar la contraseña (PATCH /usuarios/:id) también las cierra.
+}

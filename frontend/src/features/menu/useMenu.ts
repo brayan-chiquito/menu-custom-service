@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { fetchMenu } from '../../shared/api/menuApi';
 import type { MenuResponse, Producto } from '../../shared/api/types';
+import { mensajeErrorUsuario } from '../../shared/errors/mensajeErrorUsuario';
 import { usePedidoStore } from '../pedido-actual/pedidoStore';
 
 type MenuState =
   | { status: 'loading' }
-  | { status: 'error'; message: string }
+  | { status: 'error'; title: string; message: string }
   | { status: 'ok'; menu: MenuResponse };
 
 export function useMenu() {
@@ -14,6 +15,18 @@ export function useMenu() {
   const addItem = usePedidoStore((s) => s.addItem);
   const cantidadItems = usePedidoStore((s) => s.cantidadItems());
   const total = usePedidoStore((s) => s.total());
+
+  function cargar() {
+    setState({ status: 'loading' });
+    return fetchMenu()
+      .then((menu) => {
+        setState({ status: 'ok', menu });
+      })
+      .catch((error: unknown) => {
+        const alert = mensajeErrorUsuario(error, 'No se pudo cargar el menú');
+        setState({ status: 'error', title: alert.title, message: alert.message });
+      });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -25,10 +38,8 @@ export function useMenu() {
       })
       .catch((error: unknown) => {
         if (!cancelled) {
-          setState({
-            status: 'error',
-            message: error instanceof Error ? error.message : 'No se pudo cargar el menú',
-          });
+          const alert = mensajeErrorUsuario(error, 'No se pudo cargar el menú');
+          setState({ status: 'error', title: alert.title, message: alert.message });
         }
       });
     return () => {
@@ -44,5 +55,6 @@ export function useMenu() {
     addItem,
     cantidadItems,
     total,
+    reintentar: () => void cargar(),
   };
 }

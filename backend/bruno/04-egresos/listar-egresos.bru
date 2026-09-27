@@ -1,0 +1,19 @@
+meta {
+  name: Listar egresos
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/egresos?periodo=hoy
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  Lista egresos del periodo hoy|semana|mes.
+}

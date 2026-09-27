@@ -40,3 +40,30 @@ export type MenuResponse = {
   salsas: Salsa[];
   proteinas: Proteina[];
 };
+
+export type CrearProductoInput = {
+  nombre: string;
+  descripcion?: string;
+  precio: number;
+  categoria: 'platos' | 'bebidas';
+  disponible?: boolean;
+  requiere_proteina?: boolean;
+};
+
+export type ActualizarProductoInput = Partial<CrearProductoInput>;
+
+export type CrearAdicionInput = {
+  nombre: string;
+  precio: number;
+  producto_id?: number | null;
+};
+
+export type ActualizarAdicionInput = Partial<CrearAdicionInput>;
+
+export type CrearNombreInput = {
+  nombre: string;
+};
+
+export type ActualizarNombreInput = {
+  nombre: string;
+};

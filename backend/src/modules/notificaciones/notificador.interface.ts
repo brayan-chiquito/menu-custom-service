@@ -14,6 +14,7 @@ export type PedidoDTO = {
   monto_pagado: number | null;
   vuelto: number | null;
   estado: string;
+  indicaciones?: string | null;
   items: PedidoItemNotificacion[];
 };
 
@@ -26,9 +27,15 @@ export type NotificacionResponse = {
   mensaje: string;
 };
 
+export type WhatsappEstadoNotificador = {
+  activa: boolean;
+  qr: string | null;
+};
+
 export interface Notificador {
   /** Nunca debe lanzar: fallos → { enviada: false } + log. */
   enviar(pedido: PedidoDTO): Promise<ResultadoNotificacion>;
+  getEstado?(): WhatsappEstadoNotificador;
 }
 
 export function formatearMensajePedido(pedido: PedidoDTO): string {
@@ -53,6 +60,9 @@ export function formatearMensajePedido(pedido: PedidoDTO): string {
   return [
     `Pedido #${pedido.id}`,
     `Cliente: ${pedido.nombre_cliente}`,
+    ...(pedido.indicaciones && pedido.indicaciones.trim() !== ''
+      ? [`Indicaciones: ${pedido.indicaciones.trim()}`]
+      : []),
     'Detalle:',
     ...lineas,
     `Total: $${pedido.total}`,

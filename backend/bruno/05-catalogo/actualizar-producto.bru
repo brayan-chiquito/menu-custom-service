@@ -1,0 +1,27 @@
+meta {
+  name: Actualizar producto
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{baseUrl}}/catalogo/productos/1
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "requiere_proteina": false,
+    "disponible": true
+  }
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  ## PATCH /catalogo/productos/:id
+  Actualiza campos parciales del producto.
+}

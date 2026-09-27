@@ -1,0 +1,17 @@
+meta {
+  name: Eliminar pedido soft
+  type: http
+  seq: 11
+}
+
+delete {
+  url: {{baseUrl}}/pedidos/1
+  body: none
+  auth: none
+}
+
+docs {
+  ## DELETE /pedidos/:id
+  Soft-delete (`eliminado_at`). 204. Deja de aparecer en historial/balance.
+  Se puede listar con `?eliminados=1` y restaurar con PATCH .../restaurar.
+}

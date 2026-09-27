@@ -17,6 +17,7 @@ headers {
 body:json {
   {
     "nombre_cliente": "Ana",
+    "indicaciones": null,
     "items": [
       {
         "producto_id": 2,
@@ -37,5 +38,5 @@ assert {
 
 docs {
   Ejemplo Candente (requiere_proteina): base Maduro, salsas BBQ (puede ir más de una), proteína Carne, Guacamole.
-  Ajusta IDs según GET /menu.
+  Ajusta IDs según GET /menu. `indicaciones` opcional (string o null).
 }

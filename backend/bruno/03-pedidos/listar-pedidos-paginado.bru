@@ -1,0 +1,22 @@
+meta {
+  name: Listar pedidos paginado
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/pedidos?limit=10&offset=0
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  Historial completo paginado (todos los días).
+  Query: limit (default 10, máx 50), offset, estado=pendiente|pagado opcional,
+  eliminados=1 para solo soft-deleted (RF-19).
+  Respuesta: { items, total, limit, offset, has_more }.
+}
