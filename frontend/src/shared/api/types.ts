@@ -88,6 +88,7 @@ export type PedidoDetalleLinea = {
 export type PedidoDetalle = PedidoCreado & {
   lineas: PedidoDetalleLinea[];
   eliminado_at?: string | null;
+  updated_at?: string;
 };
 
 export type ConfirmarPedidoResponse = PedidoCreado & {

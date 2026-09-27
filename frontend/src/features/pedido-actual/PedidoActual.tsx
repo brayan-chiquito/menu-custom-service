@@ -116,8 +116,8 @@ export function PedidoActual() {
           <span>Indicaciones especiales</span>
         </label>
         <p className="muted">
-          Actívalo si el cliente pide algo especial (ej. sin un ingrediente). Se envía en el
-          WhatsApp del pedido.
+          Actívalo si el cliente pide algo especial (ej. sin un ingrediente). Se muestra en
+          Cocina y en el detalle del pedido.
         </p>
         {indicacionesActivas ? (
           <label className="field">

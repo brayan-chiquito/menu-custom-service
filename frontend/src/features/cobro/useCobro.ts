@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   confirmarPedido,
@@ -16,10 +16,7 @@ type CobroPhase =
   | { status: 'idle' }
   | { status: 'loading' }
   | { status: 'submitting' }
-  | {
-      status: 'done';
-      notificacion: { enviada: boolean; mensaje: string };
-    }
+  | { status: 'done' }
   | { status: 'error'; alert: ErrorAlertContent };
 
 type PedidoPendienteInfo = {
@@ -48,7 +45,6 @@ export function useCobro() {
   const [phase, setPhase] = useState<CobroPhase>(
     pedidoIdFromRoute ? { status: 'loading' } : { status: 'idle' },
   );
-  const [copiado, setCopiado] = useState(false);
 
   useEffect(() => {
     if (pedidoIdFromRoute === null) {
@@ -165,12 +161,9 @@ export function useCobro() {
       }
 
       await registrarPago(id, monto, esTransferencia);
-      const confirmado = await confirmarPedido(id);
+      await confirmarPedido(id);
 
-      setPhase({
-        status: 'done',
-        notificacion: confirmado.notificacion,
-      });
+      setPhase({ status: 'done' });
       clear();
     } catch (error: unknown) {
       setPhase({
@@ -186,18 +179,10 @@ export function useCobro() {
     }
   }
 
-  async function copiarPedido() {
-    if (phase.status !== 'done') {
-      return;
-    }
-    await navigator.clipboard.writeText(phase.notificacion.mensaje);
-    setCopiado(true);
-  }
-
-  function nuevoPedido() {
+  const nuevoPedido = useCallback(() => {
     clear();
     navigate('/');
-  }
+  }, [clear, navigate]);
 
   const vacio =
     !modoPendiente && items.length === 0 && phase.status === 'idle';
@@ -211,9 +196,7 @@ export function useCobro() {
     resumenVuelto,
     puedeConfirmar,
     phase,
-    copiado,
     confirmarPago,
-    copiarPedido,
     nuevoPedido,
     clearErrorAlert,
     vacio,

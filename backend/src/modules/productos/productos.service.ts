@@ -1,4 +1,6 @@
 import { AppError } from '../../shared/errors.js';
+import type { AppDatabase } from '../../shared/db.js';
+import { registrarAuditoria } from '../auditoria/auditoria.helper.js';
 import { ProductosRepository } from './productos.repository.js';
 import type {
   ActualizarAdicionInput,
@@ -26,7 +28,10 @@ function isUniqueConstraint(error: unknown): boolean {
 }
 
 export class ProductosService {
-  constructor(private readonly repository: ProductosRepository) {}
+  constructor(
+    private readonly repository: ProductosRepository,
+    private readonly db: AppDatabase,
+  ) {}
 
   obtenerMenu(): MenuResponse {
     return this.repository.findMenu();
@@ -44,10 +49,18 @@ export class ProductosService {
     return producto;
   }
 
-  crearProducto(input: CrearProductoInput): Producto {
+  crearProducto(input: CrearProductoInput, actorId?: number): Producto {
     const data = this.validarProductoInput(input, true);
     try {
-      return this.repository.createProducto(data);
+      const creado = this.repository.createProducto(data);
+      registrarAuditoria(this.db, {
+        usuarioId: actorId,
+        accion: 'crear',
+        entidad: 'producto',
+        entidadId: creado.id,
+        detalle: creado.nombre,
+      });
+      return creado;
     } catch (error) {
       if (isUniqueConstraint(error)) {
         throw new AppError('Ya existe un producto con ese nombre', 409);
@@ -56,7 +69,7 @@ export class ProductosService {
     }
   }
 
-  actualizarProducto(id: number, input: ActualizarProductoInput): Producto {
+  actualizarProducto(id: number, input: ActualizarProductoInput, actorId?: number): Producto {
     const actual = this.obtenerProducto(id);
     const merged: CrearProductoInput = {
       nombre: input.nombre ?? actual.nombre,
@@ -68,7 +81,15 @@ export class ProductosService {
     };
     const data = this.validarProductoInput(merged, true);
     try {
-      return this.repository.updateProducto(id, data);
+      const actualizado = this.repository.updateProducto(id, data);
+      registrarAuditoria(this.db, {
+        usuarioId: actorId,
+        accion: 'actualizar',
+        entidad: 'producto',
+        entidadId: id,
+        detalle: actualizado.nombre,
+      });
+      return actualizado;
     } catch (error) {
       if (isUniqueConstraint(error)) {
         throw new AppError('Ya existe un producto con ese nombre', 409);
@@ -77,7 +98,7 @@ export class ProductosService {
     }
   }
 
-  eliminarProducto(id: number): void {
+  eliminarProducto(id: number, actorId?: number): void {
     this.obtenerProducto(id);
     const refs = this.repository.countPedidoItemsByProducto(id);
     if (refs > 0) {
@@ -87,6 +108,12 @@ export class ProductosService {
       );
     }
     this.repository.deleteProducto(id);
+    registrarAuditoria(this.db, {
+      usuarioId: actorId,
+      accion: 'eliminar',
+      entidad: 'producto',
+      entidadId: id,
+    });
   }
 
   listarAdiciones(): Adicion[] {
@@ -101,10 +128,18 @@ export class ProductosService {
     return adicion;
   }
 
-  crearAdicion(input: CrearAdicionInput): Adicion {
+  crearAdicion(input: CrearAdicionInput, actorId?: number): Adicion {
     const data = this.validarAdicionInput(input);
     try {
-      return this.repository.createAdicion(data);
+      const creado = this.repository.createAdicion(data);
+      registrarAuditoria(this.db, {
+        usuarioId: actorId,
+        accion: 'crear',
+        entidad: 'adicion',
+        entidadId: creado.id,
+        detalle: creado.nombre,
+      });
+      return creado;
     } catch (error) {
       if (isUniqueConstraint(error)) {
         throw new AppError('Ya existe un topping con ese nombre', 409);
@@ -113,7 +148,7 @@ export class ProductosService {
     }
   }
 
-  actualizarAdicion(id: number, input: ActualizarAdicionInput): Adicion {
+  actualizarAdicion(id: number, input: ActualizarAdicionInput, actorId?: number): Adicion {
     const actual = this.obtenerAdicion(id);
     const merged: CrearAdicionInput = {
       nombre: input.nombre ?? actual.nombre,
@@ -123,7 +158,15 @@ export class ProductosService {
     };
     const data = this.validarAdicionInput(merged);
     try {
-      return this.repository.updateAdicion(id, data);
+      const actualizado = this.repository.updateAdicion(id, data);
+      registrarAuditoria(this.db, {
+        usuarioId: actorId,
+        accion: 'actualizar',
+        entidad: 'adicion',
+        entidadId: id,
+        detalle: actualizado.nombre,
+      });
+      return actualizado;
     } catch (error) {
       if (isUniqueConstraint(error)) {
         throw new AppError('Ya existe un topping con ese nombre', 409);
@@ -132,7 +175,7 @@ export class ProductosService {
     }
   }
 
-  eliminarAdicion(id: number): void {
+  eliminarAdicion(id: number, actorId?: number): void {
     this.obtenerAdicion(id);
     const refs = this.repository.countPedidoItemAdiciones(id);
     if (refs > 0) {
@@ -142,6 +185,12 @@ export class ProductosService {
       );
     }
     this.repository.deleteAdicion(id);
+    registrarAuditoria(this.db, {
+      usuarioId: actorId,
+      accion: 'eliminar',
+      entidad: 'adicion',
+      entidadId: id,
+    });
   }
 
   listarNombres(tabla: NombreTabla): Array<{ id: number; nombre: string }> {
@@ -156,10 +205,22 @@ export class ProductosService {
     return row;
   }
 
-  crearNombre(tabla: NombreTabla, input: CrearNombreInput): { id: number; nombre: string } {
+  crearNombre(
+    tabla: NombreTabla,
+    input: CrearNombreInput,
+    actorId?: number,
+  ): { id: number; nombre: string } {
     const nombre = this.validarNombre(input.nombre);
     try {
-      return this.repository.createNombre(tabla, nombre);
+      const creado = this.repository.createNombre(tabla, nombre);
+      registrarAuditoria(this.db, {
+        usuarioId: actorId,
+        accion: 'crear',
+        entidad: tabla,
+        entidadId: creado.id,
+        detalle: creado.nombre,
+      });
+      return creado;
     } catch (error) {
       if (isUniqueConstraint(error)) {
         throw new AppError(`Ya existe ${this.labelTabla(tabla)} con ese nombre`, 409);
@@ -172,11 +233,20 @@ export class ProductosService {
     tabla: NombreTabla,
     id: number,
     input: CrearNombreInput,
+    actorId?: number,
   ): { id: number; nombre: string } {
     this.obtenerNombre(tabla, id);
     const nombre = this.validarNombre(input.nombre);
     try {
-      return this.repository.updateNombre(tabla, id, nombre);
+      const actualizado = this.repository.updateNombre(tabla, id, nombre);
+      registrarAuditoria(this.db, {
+        usuarioId: actorId,
+        accion: 'actualizar',
+        entidad: tabla,
+        entidadId: id,
+        detalle: actualizado.nombre,
+      });
+      return actualizado;
     } catch (error) {
       if (isUniqueConstraint(error)) {
         throw new AppError(`Ya existe ${this.labelTabla(tabla)} con ese nombre`, 409);
@@ -185,7 +255,7 @@ export class ProductosService {
     }
   }
 
-  eliminarNombre(tabla: NombreTabla, id: number): void {
+  eliminarNombre(tabla: NombreTabla, id: number, actorId?: number): void {
     this.obtenerNombre(tabla, id);
     const refs = this.repository.countRefsNombre(tabla, id);
     if (refs > 0) {
@@ -195,6 +265,12 @@ export class ProductosService {
       );
     }
     this.repository.deleteNombre(tabla, id);
+    registrarAuditoria(this.db, {
+      usuarioId: actorId,
+      accion: 'eliminar',
+      entidad: tabla,
+      entidadId: id,
+    });
   }
 
   private labelTabla(tabla: NombreTabla): string {

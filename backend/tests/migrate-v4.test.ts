@@ -134,7 +134,7 @@ describe('migrate v3 → v7 (nullable base + egresos + soft-delete + indicacione
     expect(transferCol).toBeTruthy();
     expect(eliminadoCol).toBeTruthy();
     expect(egresosTable?.name).toBe('egresos');
-    expect(version).toBe(7);
+    expect(version).toBe(8);
 
     upgraded.close();
   });

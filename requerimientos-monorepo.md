@@ -61,8 +61,12 @@ auditoría. Acceso remoto vía Tailscale, sin nube, sin dominio.
 - RF-03 Nombre de cliente opcional → `"Sin nombre"` por defecto
 - RF-04 Cobro con validación de monto y cálculo de vuelto
 - RF-05 Confirmación explícita de pago (cambia estado a `pagado`)
-- RF-06 Notificación automática por WhatsApp al confirmar el pago,
-  sin bloquear el flujo si falla (mensaje listo para copiar si falla)
+- RF-06 ~~Notificación automática por WhatsApp al confirmar el pago~~
+  **Retirado**: la cola **Cocina** (RF-23) sustituye el aviso al
+  preparador. Tras cobrar se puede **Copiar pedido** si hace falta.
+  (El código de `whatsapp-web.js` queda fuera del flujo operativo.)
+- RF-24 ~~WhatsApp en Ajustes (estado/QR/destinos)~~ **Retirado**
+  junto con RF-06; no aplica en operación diaria.
 - RF-07 Historial de pedidos (todos los días, paginado 10 + Cargar más;
   filtros Todos/Pendientes/Pagados/Eliminados; medio Efectivo/Transfer
   si pagado; Restaurar en eliminados — RF-19)
@@ -135,14 +139,9 @@ auditoría. Acceso remoto vía Tailscale, sin nube, sin dominio.
   **Listo** (marca preparado; sale de la cola activa). La vista se
   **actualiza sola** (sin recargar a mano) cuando un pedido pasa a
   pendiente o a pagado, cuando se edita, se elimina o se marca listo
-- RF-24 WhatsApp en Ajustes: estado de la sesión del teléfono que
-  **envía**. Si está bien → **Activa**. Si no → **No activa** y se
-  muestra el **QR** para escanear. Los números **destino** (a quién
-  se envía el aviso) ya no van fijos en `.env`: se administran en
-  esa vista (uno o varios). Cambiar destinos **no** cierra la sesión
-  de WhatsApp. La sesión debe mantenerse iniciada el mayor tiempo
-  posible (volumen en disco, reconexión; no pedir QR si ya está
-  vinculada)
+- RF-25 Contraseñas de usuario: al crear o resetear, mínimo **8**
+  caracteres con **letra**, **número** y **carácter especial**
+  (validación backend + UI)
 
 ## 4. Requerimientos no funcionales
 - RNF-01 Persistencia en disco (SQLite), sin pérdida de pedidos ante
@@ -156,18 +155,15 @@ auditoría. Acceso remoto vía Tailscale, sin nube, sin dominio.
 - RNF-06 Migraciones de esquema no deben borrar pedidos de producción
   (ej. v3→v4 `base_id` nullable; v4→v5 egresos + `es_transferencia`)
 - RNF-07 Sesiones autenticadas; límite de 10 concurrentes con mensaje
-  claro si se excede; contraseñas no en texto plano
+  claro si se excede; contraseñas hasheadas (scrypt) + política RF-25
 - RNF-08 Acciones de escritura deben ser seguras ante concurrencia
   (conflicto detectable y mensaje en español; sin corrupción de datos)
-- RNF-09 Cola de cocina en vivo (push); la sesión WhatsApp persiste
-  en disco y se reintenta reconectar; destinos editables sin borrar
-  la sesión
+- RNF-09 Cola de cocina en vivo (SSE / push)
 
 ## 5. Backend (resumen — detalle operativo en `backend/README.md`)
 - Node.js + TypeScript + Express, capas `controller → service → repository`
 - SQLite vía `better-sqlite3`
-- `whatsapp-web.js` con sesión persistida en volumen
-- Notificaciones detrás de interfaz `Notificador` (Fake o WhatsApp)
+- Aviso al preparador: cola Cocina (SSE). WhatsApp operativo retirado.
 - Catálogos: `bases`, `salsas`, `proteinas`, `adiciones`; productos con
   `categoria` (`platos` | `bebidas`) y `requiere_proteina`
 - Endpoints:
@@ -175,8 +171,7 @@ auditoría. Acceso remoto vía Tailscale, sin nube, sin dominio.
     `GET /auth/me`; admin: CRUD `/usuarios`; `GET /auditoria` (seguimiento)
   - Cocina (RF-23): cola de pedidos por preparar + stream en vivo +
     marcar preparado
-  - WhatsApp (RF-24): estado de sesión (y QR si no está activa) +
-    CRUD de números destino (no rompe la sesión)
+  - (RF-24 retirado: sin endpoints WhatsApp operativos)
   - `GET /menu`
   - `POST /pedidos` (platos: base obligatoria, salsas opcionales;
     bebidas: sin base/salsa; asocia `usuario_id` del actor)
@@ -210,9 +205,9 @@ auditoría. Acceso remoto vía Tailscale, sin nube, sin dominio.
   Editar/Eliminar RF-17 + Cobrar + Balance), Balance (exportar Excel
   RF-20), Egresos, **Ajustes de menú** (CRUD catálogo, RF-16). Solo
   **admin**: Usuarios (CRUD) y **Seguimiento / consultoría**.
-  **Cocina** (cola en vivo + Listo — RF-23). Ajustes:
-  **WhatsApp** (estado/QR + números destino — RF-24). Errores
-  de acción/red/conflicto/sesión con alerta visible (RF-21 / RF-22)
+  **Cocina** (cola en vivo + Listo — RF-23). Errores
+  de acción/red/conflicto/sesión con alerta visible (RF-21 / RF-22).
+  Contraseñas nuevas con política RF-25.
 - `VITE_API_BASE_URL` configurable por `.env` (IP de Tailscale + puerto)
 
 ## 7. Docker Compose (raíz del monorepo)

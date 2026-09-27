@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { AppError } from '../../shared/errors.js';
+import { actorIdFrom } from '../../shared/middlewares/auth.middleware.js';
 import { ProductosService } from './productos.service.js';
 import type {
   ActualizarAdicionInput,
@@ -33,14 +34,17 @@ export class ProductosController {
     if (!body || typeof body !== 'object') {
       throw new AppError('Body inválido', 400);
     }
-    const creado = this.service.crearProducto({
-      nombre: body.nombre as string,
-      descripcion: body.descripcion,
-      precio: body.precio as number,
-      categoria: body.categoria as 'platos' | 'bebidas',
-      disponible: body.disponible,
-      requiere_proteina: body.requiere_proteina,
-    });
+    const creado = this.service.crearProducto(
+      {
+        nombre: body.nombre as string,
+        descripcion: body.descripcion,
+        precio: body.precio as number,
+        categoria: body.categoria as 'platos' | 'bebidas',
+        disponible: body.disponible,
+        requiere_proteina: body.requiere_proteina,
+      },
+      actorIdFrom(req),
+    );
     res.status(201).json(creado);
   }
 
@@ -50,12 +54,12 @@ export class ProductosController {
     if (!body || typeof body !== 'object') {
       throw new AppError('Body inválido', 400);
     }
-    res.status(200).json(this.service.actualizarProducto(id, body));
+    res.status(200).json(this.service.actualizarProducto(id, body, actorIdFrom(req)));
   }
 
   eliminarProducto(req: Request, res: Response): void {
     const id = this.parseId(req.params.id);
-    this.service.eliminarProducto(id);
+    this.service.eliminarProducto(id, actorIdFrom(req));
     res.status(204).send();
   }
 
@@ -73,11 +77,14 @@ export class ProductosController {
     if (!body || typeof body !== 'object') {
       throw new AppError('Body inválido', 400);
     }
-    const creado = this.service.crearAdicion({
-      nombre: body.nombre as string,
-      precio: body.precio as number,
-      producto_id: body.producto_id,
-    });
+    const creado = this.service.crearAdicion(
+      {
+        nombre: body.nombre as string,
+        precio: body.precio as number,
+        producto_id: body.producto_id,
+      },
+      actorIdFrom(req),
+    );
     res.status(201).json(creado);
   }
 
@@ -87,12 +94,12 @@ export class ProductosController {
     if (!body || typeof body !== 'object') {
       throw new AppError('Body inválido', 400);
     }
-    res.status(200).json(this.service.actualizarAdicion(id, body));
+    res.status(200).json(this.service.actualizarAdicion(id, body, actorIdFrom(req)));
   }
 
   eliminarAdicion(req: Request, res: Response): void {
     const id = this.parseId(req.params.id);
-    this.service.eliminarAdicion(id);
+    this.service.eliminarAdicion(id, actorIdFrom(req));
     res.status(204).send();
   }
 
@@ -115,7 +122,11 @@ export class ProductosController {
       if (!body || typeof body !== 'object') {
         throw new AppError('Body inválido', 400);
       }
-      const creado = this.service.crearNombre(tabla, { nombre: body.nombre as string });
+      const creado = this.service.crearNombre(
+        tabla,
+        { nombre: body.nombre as string },
+        actorIdFrom(req),
+      );
       res.status(201).json(creado);
     };
   }
@@ -127,14 +138,23 @@ export class ProductosController {
       if (!body || typeof body !== 'object') {
         throw new AppError('Body inválido', 400);
       }
-      res.status(200).json(this.service.actualizarNombre(tabla, id, { nombre: body.nombre as string }));
+      res
+        .status(200)
+        .json(
+          this.service.actualizarNombre(
+            tabla,
+            id,
+            { nombre: body.nombre as string },
+            actorIdFrom(req),
+          ),
+        );
     };
   }
 
   eliminarNombre(tabla: NombreTabla) {
     return (req: Request, res: Response): void => {
       const id = this.parseId(req.params.id);
-      this.service.eliminarNombre(tabla, id);
+      this.service.eliminarNombre(tabla, id, actorIdFrom(req));
       res.status(204).send();
     };
   }

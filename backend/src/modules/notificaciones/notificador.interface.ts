@@ -27,9 +27,15 @@ export type NotificacionResponse = {
   mensaje: string;
 };
 
+export type WhatsappEstadoNotificador = {
+  activa: boolean;
+  qr: string | null;
+};
+
 export interface Notificador {
   /** Nunca debe lanzar: fallos → { enviada: false } + log. */
   enviar(pedido: PedidoDTO): Promise<ResultadoNotificacion>;
+  getEstado?(): WhatsappEstadoNotificador;
 }
 
 export function formatearMensajePedido(pedido: PedidoDTO): string {

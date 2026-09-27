@@ -43,6 +43,10 @@ type PedidoRow = {
   es_transferencia: number;
   indicaciones: string | null;
   eliminado_at?: string | null;
+  updated_at?: string | null;
+  preparado_at?: string | null;
+  creado_por?: number | null;
+  preparado_por?: number | null;
   created_at: string;
 };
 
@@ -132,11 +136,14 @@ export class PedidosRepository {
       const result = this.db
         .prepare(
           `
-          INSERT INTO pedidos (nombre_cliente, total, monto_pagado, vuelto, estado, indicaciones)
-          VALUES (?, ?, NULL, NULL, 'pendiente', ?)
+          INSERT INTO pedidos (
+            nombre_cliente, total, monto_pagado, vuelto, estado, indicaciones,
+            updated_at, creado_por
+          )
+          VALUES (?, ?, NULL, NULL, 'pendiente', ?, strftime('%Y-%m-%d %H:%M:%f', 'now'), ?)
           `,
         )
-        .run(pedido.nombre_cliente, pedido.total, pedido.indicaciones);
+        .run(pedido.nombre_cliente, pedido.total, pedido.indicaciones, pedido.creado_por ?? null);
 
       const pedidoId = Number(result.lastInsertRowid);
 
@@ -201,7 +208,8 @@ export class PedidosRepository {
     const rows = this.db
       .prepare(
         `
-        SELECT id, nombre_cliente, total, monto_pagado, vuelto, estado, es_transferencia, indicaciones, created_at
+        SELECT id, nombre_cliente, total, monto_pagado, vuelto, estado, es_transferencia,
+               indicaciones, updated_at, preparado_at, created_at
         FROM pedidos
         WHERE ${PEDIDO_ACTIVO}
           AND ${sqlDateBogota('created_at')} = date(?)
@@ -237,7 +245,7 @@ export class PedidosRepository {
       .prepare(
         `
         SELECT id, nombre_cliente, total, monto_pagado, vuelto, estado, es_transferencia,
-               indicaciones, eliminado_at, created_at
+               indicaciones, eliminado_at, updated_at, preparado_at, created_at
         FROM pedidos
         ${whereEstado}
         ORDER BY created_at DESC, id DESC
@@ -260,6 +268,8 @@ export class PedidosRepository {
       es_transferencia: row.es_transferencia === 1,
       indicaciones: row.indicaciones ?? null,
       eliminado_at: row.eliminado_at ?? null,
+      updated_at: row.updated_at ?? row.created_at,
+      preparado_at: row.preparado_at ?? null,
       created_at: row.created_at,
     };
   }
@@ -323,7 +333,7 @@ export class PedidosRepository {
       .prepare(
         `
         SELECT id, nombre_cliente, total, monto_pagado, vuelto, estado, es_transferencia,
-               indicaciones, eliminado_at, created_at
+               indicaciones, eliminado_at, updated_at, preparado_at, created_at
         FROM pedidos
         WHERE ${PEDIDO_ACTIVO}
           AND ${dia} >= date(?)
@@ -341,7 +351,8 @@ export class PedidosRepository {
       .prepare(
         `
         SELECT id, nombre_cliente, total, monto_pagado, vuelto, estado, es_transferencia,
-               indicaciones, eliminado_at, created_at
+               indicaciones, eliminado_at, updated_at, preparado_at, creado_por, preparado_por,
+               created_at
         FROM pedidos
         WHERE id = ? AND ${scope}
         `,
@@ -417,6 +428,10 @@ export class PedidosRepository {
       es_transferencia: pedido.es_transferencia === 1,
       indicaciones: pedido.indicaciones ?? null,
       eliminado_at: pedido.eliminado_at ?? null,
+      updated_at: pedido.updated_at ?? pedido.created_at,
+      preparado_at: pedido.preparado_at ?? null,
+      creado_por: pedido.creado_por ?? null,
+      preparado_por: pedido.preparado_por ?? null,
       created_at: pedido.created_at,
       items: itemsConAdiciones,
     };
@@ -569,6 +584,8 @@ export class PedidosRepository {
       es_transferencia: pedido.es_transferencia,
       indicaciones: pedido.indicaciones,
       eliminado_at: pedido.eliminado_at ?? null,
+      updated_at: pedido.updated_at,
+      preparado_at: pedido.preparado_at,
       created_at: pedido.created_at,
       lineas: lineas.map((linea) => {
         const adiciones = (
@@ -608,7 +625,7 @@ export class PedidosRepository {
       .prepare(
         `
         UPDATE pedidos
-        SET monto_pagado = ?, vuelto = ?, es_transferencia = ?
+        SET monto_pagado = ?, vuelto = ?, es_transferencia = ?, updated_at = strftime('%Y-%m-%d %H:%M:%f', 'now')
         WHERE id = ? AND eliminado_at IS NULL
         `,
       )
@@ -631,7 +648,7 @@ export class PedidosRepository {
       .prepare(
         `
         UPDATE pedidos
-        SET estado = 'pagado'
+        SET estado = 'pagado', updated_at = strftime('%Y-%m-%d %H:%M:%f', 'now')
         WHERE id = ? AND estado = 'pendiente' AND ${PEDIDO_ACTIVO}
         `,
       )
@@ -654,7 +671,7 @@ export class PedidosRepository {
       .prepare(
         `
         UPDATE pedidos
-        SET eliminado_at = datetime('now')
+        SET eliminado_at = datetime('now'), updated_at = strftime('%Y-%m-%d %H:%M:%f', 'now')
         WHERE id = ? AND ${PEDIDO_ACTIVO}
         `,
       )
@@ -667,12 +684,31 @@ export class PedidosRepository {
       .prepare(
         `
         UPDATE pedidos
-        SET eliminado_at = NULL
+        SET eliminado_at = NULL, updated_at = strftime('%Y-%m-%d %H:%M:%f', 'now')
         WHERE id = ? AND ${PEDIDO_ELIMINADO}
         `,
       )
       .run(id);
     return result.changes > 0;
+  }
+
+  marcarPreparado(id: number, preparadoPor: number | null): Pedido | null {
+    const result = this.db
+      .prepare(
+        `
+        UPDATE pedidos
+        SET preparado_at = datetime('now'),
+            preparado_por = ?,
+            updated_at = strftime('%Y-%m-%d %H:%M:%f', 'now')
+        WHERE id = ? AND ${PEDIDO_ACTIVO} AND preparado_at IS NULL
+        `,
+      )
+      .run(preparadoPor, id);
+
+    if (result.changes === 0) {
+      return null;
+    }
+    return this.findById(id);
   }
 
   /**
@@ -695,7 +731,8 @@ export class PedidosRepository {
         .prepare(
           `
           UPDATE pedidos
-          SET nombre_cliente = ?, total = ?, monto_pagado = ?, vuelto = ?, indicaciones = ?
+          SET nombre_cliente = ?, total = ?, monto_pagado = ?, vuelto = ?, indicaciones = ?,
+              updated_at = strftime('%Y-%m-%d %H:%M:%f', 'now')
           WHERE id = ? AND ${PEDIDO_ACTIVO}
           `,
         )

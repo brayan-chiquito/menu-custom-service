@@ -102,7 +102,7 @@ describe('indicaciones + restaurar eliminados', () => {
     const version = db
       .prepare(`SELECT MAX(version) AS v FROM schema_migrations`)
       .get() as { v: number };
-    expect(version.v).toBe(7);
+    expect(version.v).toBe(8);
     const cols = db.prepare(`PRAGMA table_info(pedidos)`).all() as Array<{ name: string }>;
     expect(cols.some((c) => c.name === 'indicaciones')).toBe(true);
   });

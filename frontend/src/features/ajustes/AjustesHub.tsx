@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
+import { useAuthStore } from '../auth/authStore';
 
-const SECCIONES = [
+const CATALOGO = [
   { to: '/ajustes/productos', label: 'Productos' },
   { to: '/ajustes/toppings', label: 'Toppings' },
   { to: '/ajustes/bases', label: 'Bases' },
@@ -9,6 +10,9 @@ const SECCIONES = [
 ] as const;
 
 export function AjustesHub() {
+  const usuario = useAuthStore((s) => s.usuario);
+  const esAdmin = usuario?.rol === 'admin';
+
   return (
     <main className="page">
       <header className="page-header">
@@ -18,10 +22,31 @@ export function AjustesHub() {
         </Link>
       </header>
 
-      <p className="muted">Administra el catálogo del menú</p>
+      {usuario ? (
+        <p className="muted">
+          {usuario.nombre} · {usuario.rol}
+        </p>
+      ) : null}
 
       <nav className="stack ajustes-hub">
-        {SECCIONES.map((s) => (
+        {esAdmin ? (
+          <>
+            <Link to="/usuarios" className="ajustes-row">
+              <span>Usuarios</span>
+              <span className="ajustes-row-arrow" aria-hidden>
+                ›
+              </span>
+            </Link>
+            <Link to="/seguimiento" className="ajustes-row">
+              <span>Seguimiento</span>
+              <span className="ajustes-row-arrow" aria-hidden>
+                ›
+              </span>
+            </Link>
+          </>
+        ) : null}
+
+        {CATALOGO.map((s) => (
           <Link key={s.to} to={s.to} className="ajustes-row">
             <span>{s.label}</span>
             <span className="ajustes-row-arrow" aria-hidden>

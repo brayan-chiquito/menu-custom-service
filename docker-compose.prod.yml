@@ -1,0 +1,22 @@
+# Deploy nube / VPN (no sustituye el compose local).
+# Uso: docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
+# Requiere Compose v2.24+ (!override).
+# Publica la UI solo en localhost:8080. Pon HTTPS (Caddy/Nginx) delante
+# y no abras el 3000 a internet. Ver PROD.md.
+
+services:
+  backend:
+    ports: !override []
+    environment:
+      REQUIRE_AUTH: "1"
+      COOKIE_SECURE: "1"
+      ENFORCE_PROD_CONFIG: "1"
+      CORS_ORIGINS: ${CORS_ORIGINS:?define CORS_ORIGINS en .env}
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-24}
+
+  frontend:
+    ports: !override
+      - "127.0.0.1:8080:80"
+    build:
+      args:
+        VITE_API_BASE_URL: /api

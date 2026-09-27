@@ -1,13 +1,18 @@
 import { AppError } from '../../shared/errors.js';
+import type { AppDatabase } from '../../shared/db.js';
+import { registrarAuditoria } from '../auditoria/auditoria.helper.js';
 import { resolverRangoPeriodo } from '../pedidos/pedidos.balance.js';
 import type { PeriodoBalance } from '../pedidos/pedidos.types.js';
 import { EgresosRepository } from './egresos.repository.js';
 import type { CrearEgresoInput, Egreso } from './egresos.types.js';
 
 export class EgresosService {
-  constructor(private readonly repository: EgresosRepository) {}
+  constructor(
+    private readonly repository: EgresosRepository,
+    private readonly db: AppDatabase,
+  ) {}
 
-  crear(input: CrearEgresoInput): Egreso {
+  crear(input: CrearEgresoInput, actorId?: number): Egreso {
     const nombre = typeof input.nombre === 'string' ? input.nombre.trim() : '';
     if (nombre === '') {
       throw new AppError('nombre es obligatorio', 400);
@@ -20,12 +25,20 @@ export class EgresosService {
     }
 
     const total = Math.round(input.precio * input.cantidad);
-    return this.repository.create({
+    const egreso = this.repository.create({
       nombre,
       precio: input.precio,
       cantidad: input.cantidad,
       total,
     });
+    registrarAuditoria(this.db, {
+      usuarioId: actorId,
+      accion: 'crear',
+      entidad: 'egreso',
+      entidadId: egreso.id,
+      detalle: egreso.nombre,
+    });
+    return egreso;
   }
 
   listarPorPeriodo(periodoRaw: string | undefined): Egreso[] {

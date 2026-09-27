@@ -15,10 +15,13 @@ Variables útiles:
 
 - `PORT` (default `3000`)
 - `DATABASE_PATH` (default `data/menu.db`)
-- `WHATSAPP_TARGET_NUMBER` — número que **recibe** el aviso (código país + número, ej. `573116508052`). Si está definido, usa `WhatsappNotificador`; si no, `FakeNotificador`
+- `REQUIRE_AUTH` — si es `0`, las rutas no exigen token (útil en tests). Default: auth activo.
+- `ADMIN_INITIAL_PASSWORD` — password del admin seed (default `admin123`)
+- `WHATSAPP_TARGET_NUMBER` — se copia una sola vez a `whatsapp_destinos` si la tabla está vacía (migración / arranque)
 - `WWEBJS_AUTH_PATH` — carpeta de sesión WhatsApp (default `.wwebjs_auth`)
+- `QA=1` — usa `FakeNotificador` (sin WhatsApp real)
 
-El número que **envía** no es variable de entorno: es el WhatsApp que escanea el QR al arrancar el backend (una vez; la sesión queda en disco). Para cambiar solo el receptor, edita `WHATSAPP_TARGET_NUMBER` en el `.env` de la raíz del monorepo y reinicia.
+El número que **envía** es el WhatsApp que escanea el QR (sesión en disco). Los **destinos** se gestionan en `GET/POST/DELETE /whatsapp/destinos`.
 
 ## Tests automatizados
 
@@ -625,4 +628,133 @@ Tests: `tests/pedidos-pago.test.ts` (GET por id + pay later).
 - `GET /pedidos/balance/export?periodo=hoy|semana|mes` → `.xlsx` (exceljs).
 - Hojas Resumen / Historial / Egresos con AutoFilter; nombre con fechas del periodo.
 - Bruno: `obtener-balance-export.bru`. Tests: `tests/balance-export.test.ts`.
+
+### Task 23–26 — Auth, cocina, hardening prod
+
+Ver curls abajo. Tests: `auth-usuarios`, `cocina`, `hardening-auth`, `prod-config`.
+Bruno: `06-auth/` (login + revocar sesiones), `07-cocina/`.
+WhatsApp operativo retirado (sin rutas `/whatsapp`).
+Reset admin en el servidor: `npm run reset-admin -- "NuevaClave1!"`.
+
+---
+
+## Auth / usuarios / auditoría
+
+### POST /auth/login
+
+```bash
+curl -X POST http://localhost:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d "{\"usuario\":\"admin\",\"password\":\"Admin123!\"}"
+```
+
+**Debería responder** — `200` y `Set-Cookie: platanopolis_session=…; HttpOnly`:
+
+```json
+{
+  "token": "a1b2…64hex",
+  "usuario": { "id": 1, "usuario": "admin", "nombre": "Administrador", "rol": "admin" },
+  "expires_in_hours": 24
+}
+```
+
+El `token` del JSON es para Bruno/curl. La PWA usa la cookie y no lo guarda.
+5 fallos en 1 minuto desde la misma IP → `429`.
+Máximo 10 sesiones → `403` `"Ya hay 10 sesiones activas. Cierra una para entrar."`
+
+### GET /auth/me · POST /auth/logout
+
+```bash
+curl http://localhost:3000/auth/me -H "Authorization: Bearer <token>"
+curl -X POST http://localhost:3000/auth/logout -H "Authorization: Bearer <token>"
+```
+
+**Debería responder** — `200` (me) / `204` (logout, y borra la cookie).
+
+### GET/POST /usuarios · PATCH /usuarios/:id (solo admin)
+
+```bash
+curl http://localhost:3000/usuarios -H "Authorization: Bearer <token>"
+curl -X POST http://localhost:3000/usuarios -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d "{\"usuario\":\"op1\",\"nombre\":\"Operador\",\"rol\":\"operador\",\"password\":\"Clave123!\"}"
+```
+
+**Debería responder** — `200` lista / `201` creado. Password: mínimo 8, letra, número y especial.
+
+### DELETE /usuarios/:id/sesiones (solo admin)
+
+```bash
+curl -X DELETE http://localhost:3000/usuarios/2/sesiones -H "Authorization: Bearer <token>"
+```
+
+**Debería responder** — `200`:
+
+```json
+{ "revocadas": 1 }
+```
+
+Cambiar la contraseña en `PATCH /usuarios/:id` también cierra las sesiones de ese usuario.
+
+### Reset de emergencia del admin (en el servidor, no por HTTP)
+
+```bash
+cd backend && npm run reset-admin -- "NuevaClave1!"
+```
+
+### GET /auditoria?limit=&offset= (solo admin)
+
+```bash
+curl "http://localhost:3000/auditoria?limit=20&offset=0" -H "Authorization: Bearer <token>"
+```
+
+**Debería responder** — `200` `{ items, total, limit, offset }`.
+
+---
+
+## Cocina
+
+### GET /cocina
+
+```bash
+curl http://localhost:3000/cocina
+```
+
+**Debería responder** — `200` array de pedidos del día (pendiente|pagado, no preparados) con `items`.
+
+### GET /cocina/stream (SSE)
+
+```bash
+curl -N http://localhost:3000/cocina/stream
+```
+
+**Debería responder** — `text/event-stream` con `data: {"type":"refresh"}` (+ heartbeat comentario cada 25s).
+
+### PATCH /pedidos/:id/preparar
+
+```bash
+curl -X PATCH http://localhost:3000/pedidos/1/preparar
+```
+
+**Debería responder** — `200` pedido con `preparado_at` (no cambia `estado` de pago).
+
+### Conflicto al editar (RF-22)
+
+```bash
+curl -X PATCH http://localhost:3000/pedidos/1 \
+  -H "Content-Type: application/json" \
+  -d "{\"nombre_cliente\":\"Ana\",\"updated_at\":\"2026-01-01 00:00:00\"}"
+```
+
+**Debería responder** — `409` si `updated_at` no coincide:
+
+```json
+{ "error": "Otro usuario actualizó este pedido. Recarga e intenta de nuevo." }
+```
+
+---
+
+## WhatsApp
+
+Operativo **retirado**. No hay rutas `/whatsapp`. La cola de cocina sustituye el aviso al preparador.
 

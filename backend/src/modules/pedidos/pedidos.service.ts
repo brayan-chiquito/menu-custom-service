@@ -1,6 +1,9 @@
 import { AppError } from '../../shared/errors.js';
+import { emitCocinaRefresh } from '../../shared/cocina-events.js';
+import type { AppDatabase } from '../../shared/db.js';
 import type { Notificador } from '../notificaciones/notificador.interface.js';
 import { formatearMensajePedido } from '../notificaciones/notificador.interface.js';
+import { registrarAuditoria } from '../auditoria/auditoria.helper.js';
 import { calcularTicketPromedio, resolverRangoPeriodo } from './pedidos.balance.js';
 import { buildBalanceWorkbook, type BalanceExportResult } from './balance.export.js';
 import type { Egreso } from '../egresos/egresos.types.js';
@@ -28,6 +31,7 @@ export class PedidosService {
   constructor(
     private readonly repository: PedidosRepository,
     private readonly notificador: Notificador,
+    private readonly db: AppDatabase,
   ) {}
 
   /** Compat: pedidos del día calendario Bogotá. */
@@ -148,7 +152,7 @@ export class PedidosService {
     return detalle;
   }
 
-  crear(input: CrearPedidoInput): Pedido {
+  crear(input: CrearPedidoInput, actorId?: number): Pedido {
     if (!Array.isArray(input.items) || input.items.length === 0) {
       throw new AppError('El pedido debe incluir al menos un item', 400);
     }
@@ -160,13 +164,32 @@ export class PedidosService {
       total,
       indicaciones: normalizarIndicaciones(input.indicaciones),
       items: itemsPreparados,
+      creado_por: actorId ?? null,
     };
 
-    return this.repository.create(pedidoACrear);
+    const creado = this.repository.create(pedidoACrear);
+    registrarAuditoria(this.db, {
+      usuarioId: actorId,
+      accion: 'crear',
+      entidad: 'pedido',
+      entidadId: creado.id,
+    });
+    emitCocinaRefresh();
+    return creado;
   }
 
-  actualizar(id: number, input: ActualizarPedidoInput): PedidoDetalle {
+  actualizar(id: number, input: ActualizarPedidoInput, actorId?: number): PedidoDetalle {
     const pedido = this.obtenerPedidoOFallar(id);
+
+    if (input.updated_at !== undefined && input.updated_at !== null) {
+      if (typeof input.updated_at !== 'string' || input.updated_at !== pedido.updated_at) {
+        throw new AppError(
+          'Otro usuario actualizó este pedido. Recarga e intenta de nuevo.',
+          409,
+        );
+      }
+    }
+
     const cambiaItems = Array.isArray(input.items);
     const cambiaNombre = input.nombre_cliente !== undefined;
     const cambiaIndicaciones = input.indicaciones !== undefined;
@@ -214,18 +237,32 @@ export class PedidosService {
       items: itemsPreparados,
     });
 
+    registrarAuditoria(this.db, {
+      usuarioId: actorId,
+      accion: 'actualizar',
+      entidad: 'pedido',
+      entidadId: id,
+    });
+    emitCocinaRefresh();
     return this.obtenerPorId(id);
   }
 
-  eliminar(id: number): void {
+  eliminar(id: number, actorId?: number): void {
     this.obtenerPedidoOFallar(id);
     const ok = this.repository.softDelete(id);
     if (!ok) {
       throw new AppError(`Pedido ${id} no encontrado`, 404);
     }
+    registrarAuditoria(this.db, {
+      usuarioId: actorId,
+      accion: 'eliminar',
+      entidad: 'pedido',
+      entidadId: id,
+    });
+    emitCocinaRefresh();
   }
 
-  restaurar(id: number): PedidoDetalle {
+  restaurar(id: number, actorId?: number): PedidoDetalle {
     if (!Number.isInteger(id) || id <= 0) {
       throw new AppError('id de pedido inválido', 400);
     }
@@ -233,6 +270,29 @@ export class PedidosService {
     if (!ok) {
       throw new AppError(`Pedido ${id} no está eliminado o no existe`, 404);
     }
+    registrarAuditoria(this.db, {
+      usuarioId: actorId,
+      accion: 'restaurar',
+      entidad: 'pedido',
+      entidadId: id,
+    });
+    emitCocinaRefresh();
+    return this.obtenerPorId(id);
+  }
+
+  preparar(id: number, actorId?: number): PedidoDetalle {
+    this.obtenerPedidoOFallar(id);
+    const actualizado = this.repository.marcarPreparado(id, actorId ?? null);
+    if (!actualizado) {
+      throw new AppError(`Pedido ${id} no encontrado o ya está preparado`, 404);
+    }
+    registrarAuditoria(this.db, {
+      usuarioId: actorId,
+      accion: 'preparar',
+      entidad: 'pedido',
+      entidadId: id,
+    });
+    emitCocinaRefresh();
     return this.obtenerPorId(id);
   }
 
@@ -357,7 +417,7 @@ export class PedidosService {
     return itemsPreparados;
   }
 
-  registrarPago(id: number, input: RegistrarPagoInput): Pedido {
+  registrarPago(id: number, input: RegistrarPagoInput, actorId?: number): Pedido {
     const pedido = this.obtenerPedidoOFallar(id);
 
     if (pedido.estado !== 'pendiente') {
@@ -375,10 +435,23 @@ export class PedidosService {
 
     const vuelto = input.monto_pagado - pedido.total;
     const esTransferencia = input.es_transferencia === true;
-    return this.repository.registrarPago(id, input.monto_pagado, vuelto, esTransferencia);
+    const actualizado = this.repository.registrarPago(
+      id,
+      input.monto_pagado,
+      vuelto,
+      esTransferencia,
+    );
+    registrarAuditoria(this.db, {
+      usuarioId: actorId,
+      accion: 'cobrar',
+      entidad: 'pedido',
+      entidadId: id,
+    });
+    emitCocinaRefresh();
+    return actualizado;
   }
 
-  async confirmar(id: number): Promise<ConfirmarPedidoResponse> {
+  async confirmar(id: number, actorId?: number): Promise<ConfirmarPedidoResponse> {
     const pedido = this.obtenerPedidoOFallar(id);
 
     if (pedido.estado === 'pagado') {
@@ -415,22 +488,19 @@ export class PedidosService {
 
     const mensaje = formatearMensajePedido(pedidoDto);
 
-    let enviada = false;
-    try {
-      const resultado = await this.notificador.enviar(pedidoDto);
-      enviada = resultado.enviada;
-    } catch (error: unknown) {
-      console.error(
-        `[Notificador] Falló el envío del pedido #${pagado.id}; el pedido permanece pagado`,
-        error,
-      );
-      enviada = false;
-    }
+    registrarAuditoria(this.db, {
+      usuarioId: actorId,
+      accion: 'confirmar',
+      entidad: 'pedido',
+      entidadId: id,
+    });
+    emitCocinaRefresh();
 
     return {
       ...pagado,
       notificacion: {
-        enviada,
+        // WhatsApp operativo retirado: cocina cubre el aviso al preparador.
+        enviada: false,
         mensaje,
       },
     };

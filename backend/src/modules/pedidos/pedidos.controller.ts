@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { AppError } from '../../shared/errors.js';
+import { actorIdFrom } from '../../shared/middlewares/auth.middleware.js';
 import type { Egreso } from '../egresos/egresos.types.js';
 import { PedidosService } from './pedidos.service.js';
 import type {
@@ -90,11 +91,14 @@ export class PedidosController {
       throw new AppError('Body inválido', 400);
     }
 
-    const pedido = this.service.crear({
-      nombre_cliente: body.nombre_cliente,
-      indicaciones: body.indicaciones,
-      items: Array.isArray(body.items) ? body.items : [],
-    });
+    const pedido = this.service.crear(
+      {
+        nombre_cliente: body.nombre_cliente,
+        indicaciones: body.indicaciones,
+        items: Array.isArray(body.items) ? body.items : [],
+      },
+      actorIdFrom(req),
+    );
 
     res.status(201).json(pedido);
   }
@@ -107,25 +111,36 @@ export class PedidosController {
       throw new AppError('Body inválido', 400);
     }
 
-    const pedido = this.service.actualizar(id, {
-      nombre_cliente: body.nombre_cliente,
-      indicaciones: body.indicaciones,
-      items: Array.isArray(body.items) ? body.items : undefined,
-    });
+    const pedido = this.service.actualizar(
+      id,
+      {
+        nombre_cliente: body.nombre_cliente,
+        indicaciones: body.indicaciones,
+        items: Array.isArray(body.items) ? body.items : undefined,
+        updated_at: body.updated_at,
+      },
+      actorIdFrom(req),
+    );
 
     res.status(200).json(pedido);
   }
 
   restaurar(req: Request, res: Response): void {
     const id = Number(req.params.id);
-    const pedido = this.service.restaurar(id);
+    const pedido = this.service.restaurar(id, actorIdFrom(req));
     res.status(200).json(pedido);
   }
 
   eliminar(req: Request, res: Response): void {
     const id = Number(req.params.id);
-    this.service.eliminar(id);
+    this.service.eliminar(id, actorIdFrom(req));
     res.status(204).send();
+  }
+
+  preparar(req: Request, res: Response): void {
+    const id = Number(req.params.id);
+    const pedido = this.service.preparar(id, actorIdFrom(req));
+    res.status(200).json(pedido);
   }
 
   registrarPago(req: Request, res: Response): void {
@@ -136,17 +151,21 @@ export class PedidosController {
       throw new AppError('Body inválido', 400);
     }
 
-    const pedido = this.service.registrarPago(id, {
-      monto_pagado: body.monto_pagado as number,
-      es_transferencia: body.es_transferencia === true,
-    });
+    const pedido = this.service.registrarPago(
+      id,
+      {
+        monto_pagado: body.monto_pagado as number,
+        es_transferencia: body.es_transferencia === true,
+      },
+      actorIdFrom(req),
+    );
 
     res.status(200).json(pedido);
   }
 
   async confirmar(req: Request, res: Response): Promise<void> {
     const id = Number(req.params.id);
-    const pedido = await this.service.confirmar(id);
+    const pedido = await this.service.confirmar(id, actorIdFrom(req));
     res.status(200).json(pedido);
   }
 }

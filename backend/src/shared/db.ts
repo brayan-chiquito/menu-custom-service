@@ -1,9 +1,10 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import Database from 'better-sqlite3';
+import { hashPassword } from './password.js';
 
 const DEFAULT_DB_PATH = path.join(process.cwd(), 'data', 'menu.db');
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 8;
 
 export type AppDatabase = Database.Database;
 
@@ -64,6 +65,9 @@ export function migrate(db: AppDatabase): void {
   // Siempre (idempotente): corrige DBs que marcaron v7 sin la columna.
   migrateV6ToV7Indicaciones(db);
 
+  // Siempre (idempotente): auth, cocina, whatsapp destinos.
+  migrateV7ToV8AuthCocinaWhatsapp(db);
+
   if (currentVersion < SCHEMA_VERSION) {
     db.prepare(`INSERT INTO schema_migrations (version) VALUES (?)`).run(SCHEMA_VERSION);
   }
@@ -113,6 +117,10 @@ function ensureBaseSchema(db: AppDatabase): void {
       es_transferencia INTEGER NOT NULL DEFAULT 0 CHECK (es_transferencia IN (0, 1)),
       eliminado_at TEXT NULL,
       indicaciones TEXT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      preparado_at TEXT NULL,
+      creado_por INTEGER NULL,
+      preparado_por INTEGER NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -145,6 +153,40 @@ function ensureBaseSchema(db: AppDatabase): void {
       precio REAL NOT NULL CHECK (precio >= 0),
       cantidad REAL NOT NULL CHECK (cantidad > 0),
       total REAL NOT NULL CHECK (total >= 0),
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS usuarios (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      usuario TEXT NOT NULL UNIQUE,
+      nombre TEXT NOT NULL,
+      rol TEXT NOT NULL CHECK (rol IN ('operador', 'admin')),
+      activo INTEGER NOT NULL DEFAULT 1 CHECK (activo IN (0, 1)),
+      password_hash TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS sesiones (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      token TEXT NOT NULL UNIQUE,
+      usuario_id INTEGER NOT NULL REFERENCES usuarios(id),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      last_seen_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS auditoria (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      usuario_id INTEGER NULL REFERENCES usuarios(id),
+      accion TEXT NOT NULL,
+      entidad TEXT NOT NULL,
+      entidad_id TEXT NULL,
+      detalle TEXT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS whatsapp_destinos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      numero TEXT NOT NULL UNIQUE,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
@@ -230,4 +272,99 @@ function migrateV6ToV7Indicaciones(db: AppDatabase): void {
   if (!cols.some((c) => c.name === 'indicaciones')) {
     db.exec(`ALTER TABLE pedidos ADD COLUMN indicaciones TEXT NULL`);
   }
+}
+
+/** Auth, cocina, WhatsApp destinos; idempotente; no borra datos. */
+function migrateV7ToV8AuthCocinaWhatsapp(db: AppDatabase): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS usuarios (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      usuario TEXT NOT NULL UNIQUE,
+      nombre TEXT NOT NULL,
+      rol TEXT NOT NULL CHECK (rol IN ('operador', 'admin')),
+      activo INTEGER NOT NULL DEFAULT 1 CHECK (activo IN (0, 1)),
+      password_hash TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS sesiones (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      token TEXT NOT NULL UNIQUE,
+      usuario_id INTEGER NOT NULL REFERENCES usuarios(id),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      last_seen_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS auditoria (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      usuario_id INTEGER NULL REFERENCES usuarios(id),
+      accion TEXT NOT NULL,
+      entidad TEXT NOT NULL,
+      entidad_id TEXT NULL,
+      detalle TEXT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS whatsapp_destinos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      numero TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  const cols = db.prepare(`PRAGMA table_info(pedidos)`).all() as Array<{ name: string }>;
+  const names = new Set(cols.map((c) => c.name));
+
+  if (!names.has('updated_at')) {
+    db.exec(`ALTER TABLE pedidos ADD COLUMN updated_at TEXT`);
+    db.exec(`UPDATE pedidos SET updated_at = COALESCE(created_at, datetime('now')) WHERE updated_at IS NULL`);
+  }
+  if (!names.has('preparado_at')) {
+    db.exec(`ALTER TABLE pedidos ADD COLUMN preparado_at TEXT NULL`);
+  }
+  if (!names.has('creado_por')) {
+    db.exec(`ALTER TABLE pedidos ADD COLUMN creado_por INTEGER NULL`);
+  }
+  if (!names.has('preparado_por')) {
+    db.exec(`ALTER TABLE pedidos ADD COLUMN preparado_por INTEGER NULL`);
+  }
+
+  seedAdminIfMissing(db);
+  seedWhatsappDestinoFromEnvIfEmpty(db);
+}
+
+function seedAdminIfMissing(db: AppDatabase): void {
+  const existing = db.prepare(`SELECT id FROM usuarios WHERE usuario = 'admin'`).get() as
+    | { id: number }
+    | undefined;
+  // Debe cumplir passwordPolicy (≥8, letra, número, especial).
+  const password = process.env.ADMIN_INITIAL_PASSWORD?.trim() || 'Admin123!';
+  if (!existing) {
+    db.prepare(
+      `
+      INSERT INTO usuarios (usuario, nombre, rol, activo, password_hash)
+      VALUES ('admin', 'Administrador', 'admin', 1, ?)
+      `,
+    ).run(hashPassword(password));
+    return;
+  }
+  // QA / reinicios: si se define ADMIN_INITIAL_PASSWORD, alinear el hash del admin.
+  if (process.env.ADMIN_INITIAL_PASSWORD?.trim()) {
+    db.prepare(`UPDATE usuarios SET password_hash = ? WHERE usuario = 'admin'`).run(
+      hashPassword(password),
+    );
+  }
+}
+
+function seedWhatsappDestinoFromEnvIfEmpty(db: AppDatabase): void {
+  const count = (db.prepare(`SELECT COUNT(*) AS n FROM whatsapp_destinos`).get() as { n: number })
+    .n;
+  if (count > 0) {
+    return;
+  }
+  const target = process.env.WHATSAPP_TARGET_NUMBER?.trim();
+  if (!target) {
+    return;
+  }
+  db.prepare(`INSERT INTO whatsapp_destinos (numero) VALUES (?)`).run(target);
 }

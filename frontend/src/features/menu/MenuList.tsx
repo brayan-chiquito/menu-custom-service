@@ -1,11 +1,15 @@
 import { Link, useNavigate } from 'react-router-dom';
+import { logout } from '../../shared/api/authApi';
 import { AlertError } from '../../shared/components/AlertError';
 import { Button } from '../../shared/components/Button';
+import { useAuthStore } from '../auth/authStore';
 import { AgregarProductoModal } from './AgregarProductoModal';
 import { useMenu } from './useMenu';
 
 export function MenuList() {
   const navigate = useNavigate();
+  const usuario = useAuthStore((s) => s.usuario);
+  const clear = useAuthStore((s) => s.clear);
   const {
     state,
     selected,
@@ -16,6 +20,16 @@ export function MenuList() {
     total,
     reintentar,
   } = useMenu();
+
+  async function salir() {
+    try {
+      await logout();
+    } catch {
+      // limpiar igual si el token ya no vale
+    }
+    clear();
+    navigate('/login', { replace: true });
+  }
 
   if (state.status === 'loading') {
     return (
@@ -51,11 +65,23 @@ export function MenuList() {
           <Link to="/ajustes" className="btn-gear" aria-label="Ajustes">
             ⚙
           </Link>
+          <Link to="/cocina" className="link-action">
+            Cocina
+          </Link>
           <Link to="/historial" className="link-action">
             Historial
           </Link>
         </nav>
       </header>
+
+      {usuario ? (
+        <div className="session-chip">
+          <span>{usuario.nombre}</span>
+          <button type="button" className="link-action session-logout" onClick={() => void salir()}>
+            Salir
+          </button>
+        </div>
+      ) : null}
 
       <section className="product-grid">
         {menu.productos.map((producto) => (

@@ -48,6 +48,10 @@ export type Pedido = {
   es_transferencia: boolean;
   indicaciones: string | null;
   eliminado_at?: string | null;
+  updated_at: string;
+  preparado_at: string | null;
+  creado_por?: number | null;
+  preparado_por?: number | null;
   created_at: string;
   items: PedidoItem[];
 };
@@ -63,6 +67,8 @@ export type PedidoResumen = {
   es_transferencia: boolean;
   indicaciones: string | null;
   eliminado_at?: string | null;
+  updated_at: string;
+  preparado_at: string | null;
   created_at: string;
 };
 
@@ -127,6 +133,8 @@ export type PedidoDetalle = {
   es_transferencia: boolean;
   indicaciones: string | null;
   eliminado_at?: string | null;
+  updated_at: string;
+  preparado_at: string | null;
   created_at: string;
   lineas: PedidoDetalleLinea[];
 };
@@ -170,12 +178,15 @@ export type PedidoACrear = {
   total: number;
   indicaciones: string | null;
   items: PedidoItemACrear[];
+  creado_por?: number | null;
 };
 
 export type ActualizarPedidoInput = {
   nombre_cliente?: string | null;
   indicaciones?: string | null;
   items?: CrearPedidoItemInput[];
+  /** Si se envía y no coincide con el actual → 409. */
+  updated_at?: string;
 };
 
 export type RegistrarPagoInput = {

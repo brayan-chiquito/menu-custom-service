@@ -78,6 +78,7 @@ export function PedidoEditarPage() {
   const [indicacionesActivas, setIndicacionesActivas] = useState(false);
   const [indicaciones, setIndicaciones] = useState('');
   const [estado, setEstado] = useState<'pendiente' | 'pagado'>('pendiente');
+  const [updatedAt, setUpdatedAt] = useState<string | undefined>(undefined);
   const [items, setItems] = useState<DraftItem[]>([]);
   const [menu, setMenu] = useState<MenuResponse | null>(null);
   const [selected, setSelected] = useState<Producto | null>(null);
@@ -103,6 +104,7 @@ export function PedidoEditarPage() {
         setIndicacionesActivas(texto !== '');
         setIndicaciones(texto);
         setEstado(detalle.estado);
+        setUpdatedAt(detalle.updated_at);
         setItems(detalle.lineas.map(lineaToDraft));
         setMenu(menuRes);
         setCargando(false);
@@ -138,6 +140,7 @@ export function PedidoEditarPage() {
         indicaciones:
           indicacionesActivas && indicaciones.trim() !== '' ? indicaciones.trim() : null,
         items: draftToPayload(items),
+        updated_at: updatedAt,
       });
       navigate('/historial');
     } catch (err: unknown) {
@@ -197,8 +200,8 @@ export function PedidoEditarPage() {
           <span>Indicaciones especiales</span>
         </label>
         <p className="muted">
-          Actívalo si el cliente pide algo especial (ej. sin un ingrediente). Se envía en el
-          WhatsApp del pedido.
+          Actívalo si el cliente pide algo especial (ej. sin un ingrediente). Se muestra en
+          Cocina y en el detalle del pedido.
         </p>
         {indicacionesActivas ? (
           <label className="field">

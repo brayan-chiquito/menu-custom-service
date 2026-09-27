@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { AppError } from '../../shared/errors.js';
+import { actorIdFrom } from '../../shared/middlewares/auth.middleware.js';
 import { EgresosService } from './egresos.service.js';
 import type { CrearEgresoInput } from './egresos.types.js';
 
@@ -11,11 +12,14 @@ export class EgresosController {
     if (!body || typeof body !== 'object') {
       throw new AppError('Body inválido', 400);
     }
-    const egreso = this.service.crear({
-      nombre: body.nombre as string,
-      precio: body.precio as number,
-      cantidad: body.cantidad as number,
-    });
+    const egreso = this.service.crear(
+      {
+        nombre: body.nombre as string,
+        precio: body.precio as number,
+        cantidad: body.cantidad as number,
+      },
+      actorIdFrom(req),
+    );
     res.status(201).json(egreso);
   }
 

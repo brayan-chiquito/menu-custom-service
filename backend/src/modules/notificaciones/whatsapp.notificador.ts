@@ -5,6 +5,7 @@ import type {
   Notificador,
   PedidoDTO,
   ResultadoNotificacion,
+  WhatsappEstadoNotificador,
 } from './notificador.interface.js';
 import { formatearMensajePedido } from './notificador.interface.js';
 
@@ -12,15 +13,17 @@ const { Client, LocalAuth } = pkg;
 
 /**
  * WhatsAppNotificador con sesión persistida en disco.
+ * Envía a todos los destinos provistos por getDestinos().
  * Nunca lanza: si falla el envío, loggea y retorna { enviada: false }.
  */
 export class WhatsappNotificador implements Notificador {
   private readonly client: InstanceType<typeof Client>;
   private ready = false;
+  private lastQr: string | null = null;
   private initPromise: Promise<void> | null = null;
 
   constructor(
-    private readonly targetNumber: string,
+    private readonly getDestinos: () => string[],
     authPath: string = process.env.WWEBJS_AUTH_PATH ??
       path.join(process.cwd(), '.wwebjs_auth'),
   ) {
@@ -34,6 +37,7 @@ export class WhatsappNotificador implements Notificador {
     });
 
     this.client.on('qr', (qr: string) => {
+      this.lastQr = qr;
       console.log('[WhatsApp] Escanea el QR para vincular la sesión (teléfono que ENVÍA):');
       console.log(
         `[WhatsApp] Abre esta URL en el PC y escanea la imagen:\nhttps://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`,
@@ -43,6 +47,7 @@ export class WhatsappNotificador implements Notificador {
 
     this.client.on('ready', () => {
       this.ready = true;
+      this.lastQr = null;
       console.log('[WhatsApp] Cliente listo (sesión persistida; no hace falta QR otra vez)');
     });
 
@@ -58,7 +63,15 @@ export class WhatsappNotificador implements Notificador {
     this.client.on('disconnected', (reason: string) => {
       console.error('[WhatsApp] Desconectado:', reason);
       this.ready = false;
+      // No borrar LocalAuth: la sesión en disco se reutiliza al reconectar.
     });
+  }
+
+  getEstado(): WhatsappEstadoNotificador {
+    return {
+      activa: this.ready,
+      qr: this.ready ? null : this.lastQr,
+    };
   }
 
   async iniciar(): Promise<void> {
@@ -82,10 +95,32 @@ export class WhatsappNotificador implements Notificador {
         return { enviada: false };
       }
 
-      const chatId = normalizarChatId(this.targetNumber);
+      const destinos = this.getDestinos().map((n) => n.trim()).filter(Boolean);
+      if (destinos.length === 0) {
+        console.error(
+          `[WhatsApp] Sin destinos configurados; no se envió el pedido #${pedido.id}`,
+        );
+        return { enviada: false };
+      }
+
       const mensaje = formatearMensajePedido(pedido);
-      await this.client.sendMessage(chatId, mensaje);
-      return { enviada: true };
+      const resultados = await Promise.all(
+        destinos.map(async (numero) => {
+          try {
+            await this.client.sendMessage(normalizarChatId(numero), mensaje);
+            return true;
+          } catch (error) {
+            console.error(
+              `[WhatsApp] Error al enviar pedido #${pedido.id} a ${numero}:`,
+              error,
+            );
+            return false;
+          }
+        }),
+      );
+
+      const enviada = resultados.every(Boolean);
+      return { enviada };
     } catch (error) {
       console.error(
         `[WhatsApp] Error al enviar pedido #${pedido.id}; el pedido permanece pagado:`,

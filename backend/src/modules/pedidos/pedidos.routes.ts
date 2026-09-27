@@ -52,6 +52,14 @@ export function createPedidosRouter(controller: PedidosController): Router {
     void controller.confirmar(req, res).catch(next);
   });
 
+  router.patch('/:id/preparar', (req, res, next) => {
+    try {
+      controller.preparar(req, res);
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.patch('/:id/restaurar', (req, res, next) => {
     try {
       controller.restaurar(req, res);

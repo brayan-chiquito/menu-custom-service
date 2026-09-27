@@ -11,7 +11,7 @@ npm install
 npm run dev
 ```
 
-`VITE_API_BASE_URL` apunta al backend (ej. `http://localhost:3000` o IP Tailscale).
+`VITE_API_BASE_URL=/api` (mismo origen). Vite hace proxy a `:3000`, o a `:3001` con `npx vite --mode qa`. La sesión va en cookie; no se guarda el token.
 
 ## Tests
 
@@ -25,16 +25,20 @@ npm test
 |------|---------|
 | `/` | Menú + modal (platos: base obligatoria, salsas opcionales; bebidas: agregar directo) |
 | `/resumen` | Pedido actual (+ Guardar sin pagar) |
-| `/cobro` | Pago desde carrito (+ checkbox Transferencia) + WhatsApp / Copiar pedido |
+| `/cobro` | Pago desde carrito (+ Transferencia); al pagar: éxito + «Nuevo pedido» y redirect ~3.5s |
 | `/cobro/:pedidoId` | Cobrar un pedido ya guardado (pendiente) |
 | `/historial` | Todos los días (+ Cargar más, badges, Detalles, Eliminados/Restaurar, Balance) |
 | `/historial/:id/editar` | Editar nombre, ítems e indicaciones (pendiente o pagado) |
 | `/balance` | Ventas, efectivo/transfer, gastos, ganancia (Hoy/Semana/Mes) |
 | `/egresos` | Registrar gasto (nombre, precio, cantidad) + lista del periodo |
-| `/ajustes` | Hub catálogo: Productos, Toppings, Bases, Salsas, Proteínas |
+| `/ajustes` | Hub: Usuarios/Seguimiento (admin), catálogo |
 | `/ajustes/productos` | CRUD productos (`requiere_proteina` opcional por plato) |
 | `/ajustes/toppings` | CRUD toppings (nombre, precio) |
 | `/ajustes/bases` · `/salsas` · `/proteinas` | CRUD por nombre |
+| `/login` | Login (usuario + contraseña) |
+| `/cocina` | Cola de órdenes en vivo (SSE) + Listo |
+| `/usuarios` · `/usuarios/nuevo` · `/usuarios/:id` | Gestión usuarios (solo admin) |
+| `/seguimiento` | Auditoría quién/qué/cuándo (solo admin) |
 
 ## Pedidos pendientes
 
@@ -56,7 +60,7 @@ Ver `pencilux/UX-Menu.pen` (guion UX local si aplica).
 `features/menu` + `shared/api/menuApi.ts` → `GET /menu`.
 
 ### Task 9 — Resumen + Cobro
-`pedido-actual` + `cobro` → POST/PATCH pago/confirmar + copiar mensaje.
+`pedido-actual` + `cobro` → POST/PATCH pago/confirmar; pantalla «Pedido pagado» con contador ~4s y redirect (sin Copiar; Cocina reemplaza el aviso de prep).
 
 ### Task 10 — Historial
 `historial` → `GET /pedidos?fecha=hoy`.
@@ -95,7 +99,7 @@ Detalles → **Editar** / **Eliminar** (confirmación). Soft-delete.
 Editar ítems también en pagados. Tests: `historial.edit.test.ts`.
 
 ### Task 20 — Indicaciones + Eliminados/Restaurar
-Resumen/Editar: checkbox **Indicaciones especiales** (off) → textarea; van al WhatsApp.
+Resumen/Editar: checkbox **Indicaciones especiales** (off) → textarea; se ven en cocina e historial.
 Historial: filtro **Eliminados** + **Restaurar**. Tests: `historial.filters.test.ts`, `pedidoStore.test.ts`.
 
 ### Task 21 — Exportar balance Excel
@@ -104,3 +108,13 @@ Balance: botón **Exportar Excel** al pie; descarga `.xlsx` del periodo (Hoy/Sem
 ### Task 22 — Alertas de error (RF-21)
 Alerta visible arriba ante fallos de red/API (crear, cobrar, guardar, etc.). Sin toasts de éxito.
 Tests: `mensajeErrorUsuario.test.ts`.
+
+### Task 23 — Auth / usuarios / seguimiento
+Login obligatorio; chip sesión + Salir en Menú. Admin: Usuarios + Seguimiento.
+Conflicto 409 al editar pedido concurrente. Tests: `seguimiento.format.test.ts`.
+
+### Task 24 — Cocina en vivo
+`/cocina` con SSE (ticket corto, no el token de sesión). Botón Listo. Link desde el menú.
+
+### Task 26 — Sesión y prod
+Cookie httpOnly (la PWA no guarda el token). `/usuarios`: no se ve la clave; se asigna una nueva y se pueden cerrar sesiones. Dos admins antes de prod. Ver `PROD.md`.

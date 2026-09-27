@@ -1,4 +1,4 @@
-import { ApiError, apiFetch, getApiBaseUrl } from './client';
+import { ApiError, apiFetch, apiFetchRaw } from './client';
 import type {
   BalanceVentas,
   ConfirmarPedidoResponse,
@@ -66,14 +66,7 @@ export async function downloadBalanceExport(
   periodo: PeriodoBalance,
   suggestedFilename?: string,
 ): Promise<void> {
-  let response: Response;
-  try {
-    response = await fetch(
-      `${getApiBaseUrl()}/pedidos/balance/export?periodo=${periodo}`,
-    );
-  } catch (error: unknown) {
-    throw new ApiError('Sin conexión. Revisa la red e intenta de nuevo.', 0, error);
-  }
+  const response = await apiFetchRaw(`/pedidos/balance/export?periodo=${periodo}`);
   if (!response.ok) {
     let message = `HTTP ${response.status}`;
     try {
@@ -108,6 +101,7 @@ export function actualizarPedido(
     nombre_cliente?: string | null;
     indicaciones?: string | null;
     items?: CrearPedidoItemPayload[];
+    updated_at?: string;
   },
 ): Promise<PedidoDetalle> {
   return apiFetch<PedidoDetalle>(`/pedidos/${id}`, {

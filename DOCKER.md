@@ -1,92 +1,71 @@
 # Docker — menu-custom-service
 
-Objetivo: **abrir Docker Desktop** y que backend + frontend + sesión WhatsApp
-sigan arriba sin pasos diarios (salvo el primer QR de WhatsApp).
+Objetivo: `docker compose up` deja UI + API + SQLite arriba.
+La UI llama a `/api` en el mismo origen; nginx reenvía al backend.
+WhatsApp operativo **no** se usa (Cocina avisa al preparador).
 
-## Una sola vez (setup)
+## Una sola vez
 
-1. Docker Desktop instalado y “Start Docker Desktop when you sign in” activado
-   (Settings → General).
-2. `.env` en la raíz del monorepo:
+1. Docker Desktop instalado.
+2. `.env` en la raíz:
 
 ```bash
 cp .env.example .env
 ```
 
-```env
-WHATSAPP_TARGET_NUMBER=573116508052
-VITE_API_BASE_URL=http://100.119.141.96:3000
-```
+`VITE_API_BASE_URL=/api` (ya es el default del build). No pongas `http://localhost:3000`: la cookie de sesión no viajaría.
 
-(`VITE_API_BASE_URL` = IP Tailscale del PC + `:3000`. Si cambia la IP, edita y
-vuelve a construir el frontend.)
-
-3. Desde la raíz del repo (libera puertos 3000/5173 si tenías `npm run dev`):
+3. Desde la raíz:
 
 ```bash
 docker compose up --build -d
 ```
 
-4. Primera vez WhatsApp — mira el QR en los logs:
-
-```bash
-docker compose logs -f backend
-```
-
-Busca la línea `Abre esta URL en el PC y escanea la imagen:` y ábrela en el
-navegador; escanea esa imagen con el WhatsApp del teléfono que **envía**.
-Cuando veas `[WhatsApp] Cliente listo`, puedes cerrar los logs (`Ctrl+C`).
-La sesión queda en `backend/wwebjs-session/` (volumen); **no** hace falta
-escanear otra vez al reiniciar el PC o Docker.
+4. Abre `http://localhost:5173` e inicia sesión.
 
 ## Día a día
 
-1. Enciende el PC → Docker Desktop arranca solo (si lo configuraste).
+1. Enciende el PC → Docker Desktop (si arranca con Windows).
 2. Los contenedores con `restart: unless-stopped` vuelven solos.
-3. Celular: Tailscale ON → `http://<IP-Tailscale-PC>:5173`.
-
-Si algo no levantó:
+3. Navegador → `http://localhost:5173` (en la nube, la URL HTTPS de la VPN; ver [PROD.md](PROD.md)).
 
 ```bash
 docker compose up -d
 docker compose ps
 ```
 
-## Comandos útiles
+## Comandos
 
 | Acción | Comando |
 |--------|---------|
 | Ver estado | `docker compose ps` |
-| Logs backend / QR | `docker compose logs -f backend` |
+| Logs | `docker compose logs -f backend` |
 | Parar | `docker compose stop` |
-| Arrancar de nuevo | `docker compose start` |
-| Reconstruir (cambio de código o `VITE_API_BASE_URL`) | `docker compose up --build -d` |
-| Cambiar solo destino WhatsApp | edita `WHATSAPP_TARGET_NUMBER` en `.env` → `docker compose up -d` (sin rebuild) |
+| Arrancar | `docker compose start` |
+| Reconstruir | `docker compose up --build -d` |
+| Prod (HTTPS/VPN) | `docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d` |
+| Backup de la base | `powershell -File scripts/backup-db.ps1` |
+| Reset clave admin | `cd backend && npm run reset-admin -- 'NuevaClave1!'` |
 
-Al reconstruir: la migración **v3→v4** hace `base_id` nullable **sin borrar pedidos**;
-el seed solo hace **upsert** del menú (ej. Limonada de maracuyá). No borres
-`backend/data/` salvo que quieras resetear prod a propósito.
+Al reconstruir, las migraciones no borran pedidos. El seed hace upsert del menú. No borres `backend/data/` salvo reset a propósito.
 
-## Volúmenes (no borrar)
+## Volúmenes
 
 | Host | Contenedor | Qué guarda |
 |------|------------|------------|
-| `backend/data/` | `/app/data` | SQLite (pedidos, menú) |
-| `backend/wwebjs-session/` | `/app/.wwebjs_auth` | Sesión WhatsApp |
+| `backend/data/` | `/app/data` | SQLite (pedidos, usuarios, menú) |
 
-Si borras `wwebjs-session`, tendrás que escanear el QR otra vez.
-
-## Puertos
+## Puertos (compose local)
 
 | Servicio | Host | Contenedor |
 |----------|------|------------|
 | backend | 3000 | 3000 |
-| frontend | 5173 | 80 (nginx) |
+| frontend | 5173 | 80 (nginx + proxy `/api`) |
+
+En prod el overlay no publica el 3000 y deja la UI en `127.0.0.1:8080`.
 
 ## Bruno
 
 1. `docker compose up -d`
 2. Colección `backend/bruno/`, `baseUrl = http://localhost:3000`
-3. Seed automático al arrancar el backend.
-
-Guía Tailscale: [README.md — Acceso con Tailscale](README.md#acceso-con-tailscale).
+3. Login devuelve token Bearer para Bruno. El navegador usa la cookie, no ese token.
